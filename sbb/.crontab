@@ -1,0 +1,25 @@
+#--------------------------------------------------------
+# environment
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin:
+JDBC_HIVE2_URL='jdbc:hive2://cl-hpelb1-30-wo-01-lx-ub16.lxd:10000/'
+USE_DEPRECATED_CLI=false
+USER=bd01
+#USER=${LOGNAME}
+# -----------------------------------------------------------------
+# job definition
+# .---------------- minute (0 - 59)
+# |  .------------- hour (0 - 23)
+# |  |  .---------- day of month (1 - 31)
+# |  |  |  .------- month (1 - 12)
+# |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7)
+# |  |  |  |  |
+# *  *  *  *  *  command to be executed
+# -----------------------------------------------------------------
+*/1  *  *   *  *  touch $HOME/gugus
+*/1  *  *   *  *  env  > $HOME/env
+*/2  *  *   *  *  beeline -n ${USER} -u ${JDBC_HIVE2_URL} --fastConnect=true --outputformat=table -e 'SHOW DATABASES;' > $HOME/beeline.out 2>$HOME/beeline.err
+# 1  0  *   *  *  $HOME/load/cron.daily.sh
+# 42 0  *   *  *  $HOME/etl/bin/cron.daily.sh > $HOME/etl/log/cron.daily.$(date +%Y%m%d_%H%M%S).log 2> $HOME/etl/log/cron.daily.$(date +%Y%m%d_%H%M%S).err
+#*/3  16 *   *  *  bash ./sbb/dailyjob.sh
+*/1  21 *   *  *  bash ./sbb/dailyjob.sh

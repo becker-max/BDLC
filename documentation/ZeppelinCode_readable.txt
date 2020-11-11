@@ -1,0 +1,947 @@
+{"paragraphs":[{"text":"%pyspark
+
+######################################################################
+# Starting Point: SparkSession
+
+# ##################################################
+# imports
+from pyspark.sql import SparkSession
+from pandas import pandas as pd
+
+from datetime import datetime
+import calendar
+
+# ##################################################
+# set config
+spark = SparkSession.builder.appName(\"DataFrame Unibit\").getOrCreate()
+spark.sparkContext.setLogLevel('WARN')
+print(spark.sparkContext.getConf().toDebugString())
+
+########################################################
+# iterate over each json file on hdfs examples/sbb and append to Dataframe \"dfALL\"
+
+hadoop = spark._jvm.org.apache.hadoop
+fs = hadoop.fs.FileSystem
+conf = hadoop.conf.Configuration() 
+#path = hadoop.fs.Path('/user/bd01/examples/unibit.ai/historicalstockprice/json')
+path = hadoop.fs.Path('/user/bd01/examples/sbb')
+
+paths=[]
+
+for f in fs.get(conf).listStatus(path):
+    paths.append(str(f.getPath()))
+
+\"\"\"
+for x in paths:
+        dftemp=spark.read.json(x)
+        dfAll=dftemp.union(dftemp)
+\"\"\"
+
+dfAll=pd.DataFrame()
+
+for x in paths:
+        dfAll=dfAll.append(spark.read.json(x).toPandas(),ignore_index=True)
+
+
+valbegin=[]
+for x in dfAll['validitybegin']:
+    try:
+        temp=x.split(\"T\")[0]
+        valbegin.append(datetime.strptime(temp,'%Y-%M-%d'))
+    except:
+        valbegin.append(str(x))
+
+
+valend=[]
+for x in dfAll['validityend']:
+    try:
+        temp=x.split(\"T\")[0]
+        valend.append(datetime.strptime(temp,'%Y-%M-%d'))
+    except:
+        valend.append(str(x))
+
+#trennt titel nach titel und linie, weil im titel die betroffene linie vermerkt ist
+title=[]
+line=[]
+for x in dfAll['title']:
+    try:
+        if \": \" in x:
+            title.append(x.split(\": \")[0])
+            line.append(x.split(\": \")[1])
+        elif \":\" in x:
+            title.append(x.split(\":\")[0])
+            line.append(x.split(\":\")[1])
+    except:
+        title.append(str(x))
+
+
+#nimmt description html und trennt sie nach den verschiedenen mustern
+deschtml=[]
+for x in dfAll['description_html']:
+    try:
+        if \"Due\" in x:
+            temp=x.split(\"Due: \")[1]
+            deschtml.append((temp.split(\"<br />\")[0]).replace(\"<br />\", \" \"))
+        elif \"Reason\" in x:
+            temp=x.split(\"Reason: \")[1]
+            deschtml.append((temp.split(\"<br />\")[0]).replace(\"<br />\", \" \"))
+        else:
+            try:
+                deschtml.append((x.split(\"<br /><br />\")[1]).replace(\"<br />\", \" \"))
+            except:
+                deschtml.append((x.split(\"<br /> <br />\")[1]).replace(\"<br />\", \" \"))
+    except:
+        x.replace(\"<br />\", \" \")
+        deschtml.append(str(x))
+
+#wochentage herausfinden
+beginday=[]
+for x in valbegin:
+    try:
+        beginday.append(calendar.day_name[x.weekday()])
+    except:
+        beginday.append(x)
+    
+endday=[]
+for x in valend:
+    try:
+        endday.append(calendar.day_name[x.weekday()])
+    except:
+        endday.append(x)
+
+dauer=[]
+for (x1,x2) in zip(valend,valbegin):
+    try:
+        diff=x1-x2
+        diff=diff/60/60
+        dauer.append(diff)
+    except:
+        dauer.append(\"undefined\")
+
+list_of_tuples = list(zip(valbegin,beginday,valend,endday,dauer,title,line,deschtml))
+
+df1 = pd.DataFrame(list_of_tuples, columns = ['begin_date','begin_day','end_date','end_day','dauer','title','line','reason'])
+
+dfsq = spark.createDataFrame(df1)
+
+dfsq.createOrReplaceTempView(\"stoerungen\")
+
+","user":"admin","dateUpdated":"2019-05-11T17:10:14+0000","config":{"colWidth":12,"editorMode":"ace/mode/python","results":{},"enabled":true,"editorSetting":{"language":"python"}},"settings":{"params":{},"forms":{}},"results":{"code":"SUCCESS","msg":[{"type":"TEXT","data":"concurrentSQL=false
+importImplicit=true
+master=yarn
+maxResult=1000
+printREPLOutput=true
+spark.app.id=application_1555439261636_0006
+spark.app.name=DataFrame Unibit
+spark.driver.appUIAddress=http://cl-hpelb1-50-gw-01-lx-ub16.lxd:4040
+spark.driver.extraClassPath=/etc/zeppelin/conf/external-dependency-conf:/usr/hdp/current/zeppelin-server/interpreter/spark/*:/usr/hdp/current/zeppelin-server/lib/interpreter/*::/usr/hdp/current/zeppelin-server/interpreter/spark/zeppelin-spark_2.11-0.7.3.2.6.5.1050-37.jar
+spark.driver.extraJavaOptions= -Dfile.encoding=UTF-8 -Dlog4j.configuration=file:///usr/hdp/current/zeppelin-server/conf/log4j.properties -Dzeppelin.log.file=/var/log/zeppelin/zeppelin-interpreter-spark2-spark-zeppelin-cl-hpelb1-50-gw-01-lx-ub16.log
+spark.driver.extraLibraryPath=/usr/hdp/current/hadoop-client/lib/native:/usr/hdp/current/hadoop-client/lib/native/Linux-amd64-64
+spark.driver.host=cl-hpelb1-50-gw-01-lx-ub16.lxd
+spark.driver.memory=512M
+spark.driver.port=38069
+spark.eventLog.dir=hdfs:///spark2-history/
+spark.eventLog.enabled=true
+spark.executor.cores=1
+spark.executor.extraLibraryPath=/usr/hdp/current/hadoop-client/lib/native:/usr/hdp/current/hadoop-client/lib/native/Linux-amd64-64
+spark.executor.id=driver
+spark.executor.memory=512M
+spark.executorEnv.PYTHONPATH=/usr/hdp/current/spark2-client//python/lib/py4j-0.10.6-src.zip:/usr/hdp/current/spark2-client//python/:/usr/hdp/current/spark2-client//python:/usr/hdp/current/spark2-client//python/lib/py4j-0.8.2.1-src.zip<CPS>{{PWD}}/pyspark.zip<CPS>{{PWD}}/py4j-0.10.6-src.zip
+spark.history.fs.logDirectory=hdfs:///spark2-history/
+spark.history.kerberos.keytab=none
+spark.history.kerberos.principal=none
+spark.history.provider=org.apache.spark.deploy.history.FsHistoryProvider
+spark.history.ui.port=18081
+spark.jars=file:/usr/hdp/current/zeppelin-server/interpreter/spark/zeppelin-spark_2.11-0.7.3.2.6.5.1050-37.jar
+spark.master=yarn
+spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_HOSTS=cl-hpelb1-20-ma-01-lx-ub16.lxd
+spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_URI_BASES=http://cl-hpelb1-20-ma-01-lx-ub16.lxd:8088/proxy/application_1555439261636_0006
+spark.repl.class.outputDir=/tmp/spark-810bd22e-8bbe-404d-b131-e46c6f9e686b
+spark.repl.class.uri=spark://cl-hpelb1-50-gw-01-lx-ub16.lxd:38069/classes
+spark.scheduler.mode=FAIR
+spark.sql.catalogImplementation=hive
+spark.submit.deployMode=client
+spark.ui.filters=org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+spark.ui.proxyBase=/proxy/application_1555439261636_0006
+spark.yarn.dist.archives=/usr/hdp/current/spark2-client/R/lib/sparkr.zip#sparkr
+spark.yarn.historyServer.address=cl-hpelb1-30-wo-02-lx-ub16.lxd:18081
+spark.yarn.isPython=true
+spark.yarn.queue=default
+sql.stacktrace=false
+useHiveContext=true
+"}]},"apps":[],"jobName":"paragraph_1557338940225_390490020","id":"20190508-174119_51858250","dateCreated":"2019-05-08T18:09:00+0000","dateStarted":"2019-05-11T17:10:14+0000","dateFinished":"2019-05-11T17:10:19+0000","status":"FINISHED","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:6287"},{"text":"%sql
+
+-- alles selectieren
+select * from stoerungen","user":"admin","dateUpdated":"2019-05-11T17:10:24+0000","config":{"colWidth":12,"editorMode":"ace/mode/sql","results":{"0":{"graph":{"mode":"table","height":300,"optionOpen":false},"helium":{}}},"enabled":true,"editorSetting":{"language":"sql"}},"settings":{"params":{},"forms":{}},"results":{"code":"SUCCESS","msg":[{"type":"TABLE","data":"begin_date\tbegin_day\tend_date\tend_day\tdauer\ttitle\tline\treason
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tRestriction\tOthmarsingen\tTechnical fault with the railway Installation
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tDisruption\tMittelhäusern - Schwarzenburg\tStorm damages
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tEnd of announcement\tBusswil -  Büren an der Aare\tThe disruption between Busswil and Büren an der Aare on the Lyss - Büren an der Aare line is over.
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tDisruption\tLes Hauts-Geneveys - La Chaux-de-Fonds\tdamage to the track.
+2018-01-04 00:07:00.0\tThursday\t2018-01-04 00:07:00.0\tThursday\t0\tDisruption\tPorrentruy - Boncourt\tIncident with a road vehicle
+2018-01-04 00:07:00.0\tThursday\t2018-01-04 00:07:00.0\tThursday\t0\tEnd of announcement\tRenens VD\tThe disruption at Renens VD station has been cleared.
+2018-01-03 00:07:00.0\tWednesday\t2018-01-07 00:07:00.0\tSunday\t96000000000\tDisruption\tMittelhäusern - Schwarzenburg\tStorm damages
+2018-01-27 00:06:00.0\tSaturday\t2018-01-27 00:06:00.0\tSaturday\t0\tDisruption\tBuchs SG - Salez-Sennwald\tBetween Buchs SG and Salez-Sennwald on the Sargans - St. Margrethen line, no train services are operating.
+2018-01-27 00:06:00.0\tSaturday\t2018-01-27 00:06:00.0\tSaturday\t0\tRestriction\tBuchs SG -  Salez-Sennwald\tBetween Buchs SG and Salez-Sennwald on the Sargans  - St. Margrethen line, only limited train services are operating.
+2018-01-27 00:06:00.0\tSaturday\t2018-01-27 00:06:00.0\tSaturday\t0\tRestriction\tBuchs SG - Salez-Sennwald\tBetween Buchs SG and Salez-Sennwald on the Sargans - St. Margrethen line, no train services are operating.
+2018-01-27 00:06:00.0\tSaturday\t2018-01-27 00:06:00.0\tSaturday\t0\tRestriction\tBuchs SG - Salez-Sennwald\tBetween Buchs SG and Salez-Sennwald on the Sargans - St. Margrethen line, no train services are operating.
+2018-01-27 00:06:00.0\tSaturday\t2018-01-27 00:06:00.0\tSaturday\t0\tRestriction\tBuchs SG - Salez-Sennwald\tBetween Buchs SG and Salez-Sennwald on the Sargans - St. Margrethen line, no train services are operating.
+2018-01-21 00:06:00.0\tSunday\t2018-01-28 00:06:00.0\tSunday\t168000000000\tConstruction work\tBetween Coppet and Nyon, engineering work is in progress.\tBetween Coppet and Nyon, engineering work is in progress.
+2018-01-24 00:06:00.0\tWednesday\t2018-01-24 00:06:00.0\tWednesday\t0\tEnd of announcement\tLuino (I) -  Maccagno\tThe disruption between Luino (I) and Maccagno on the Luino - Bellinzona line is over.
+2018-01-24 00:06:00.0\tWednesday\t2018-01-24 00:06:00.0\tWednesday\t0\tConstruction work\tBetween Effretikon and Winterthur, engineering work is in progress.\tUnscheduled construction work
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tRestriction\tSchwerzenbach ZH -  Uster\tdamage to the track.
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tEnd of announcement\tSchwerzenbach ZH -  Uster\tThe disruption between Schwerzenbach ZH and Uster on the Zürich HB - Wetzikon line is over.
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tRestriction\tArnex -  Croy-Romainmôtier\tFire near the tracks
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tEnd of announcement\tArnex -  Croy-Romainmôtier\tThe disruption between Arnex and Croy-Romainmôtier on the La Sarraz - Le Day line is over.
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tDisruption\tUntervaz-Trimmis - Landquart\tderailment.
+2018-01-23 00:06:00.0\tTuesday\t2018-01-01 00:07:00.0\tMonday\t-527983333000\tConstruction work\tBetween Lausanne and Renens VD engineering work is in progress.\tBetween Lausanne and Renens VD on the line Lausanne - Genève, engineering work is in progress.
+2018-01-15 00:06:00.0\tMonday\t2018-01-01 00:07:00.0\tMonday\t-335983333000\tDisruption\tBellegarde (Ain) - Bourg-en-Bresse\tLandslide
+2018-01-24 00:06:00.0\tWednesday\t2018-01-24 00:06:00.0\tWednesday\t0\tDisruption\tRapperswil - Pfäffikon SZ\tObstacle on the tracks
+2018-01-27 00:05:00.0\tSaturday\t2018-01-24 00:06:00.0\tWednesday\t-71983333000\tConstruction work\tBetween Bern and Zollikofen, engineering work is in progress.\tBetween Bern and Zollikofen, engineering work is in progress. 
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tRestriction\tBrig -  Visp\tUnscheduled construction work
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tEnd of announcement\tBrig -  Visp\tThe disruption between Brig and Visp on the Brig - Lausanne line is over.
+2018-01-25 00:06:00.0\tThursday\t2018-01-25 00:06:00.0\tThursday\t0\tRestriction\tSchwerzenbach ZH -  Uster\tTechnical fault with the railway Installation
+2018-01-26 00:06:00.0\tFriday\t2018-01-26 00:06:00.0\tFriday\t0\tEnd of announcement\tBowil -  Langnau i.E.\tThe disruption between Bowil and Langnau i.E. on the Bern - Langnau i.E. line is over.
+2018-01-26 00:06:00.0\tFriday\t2018-01-26 00:06:00.0\tFriday\t0\tEnd of announcement\tBassersdorf - Effretikon\tThe disruption between Bassersdorf and Effretikon on the Zürich Oerlikon - Winterthur line is over.
+2018-01-01 00:07:00.0\tMonday\t2018-01-17 00:08:00.0\tWednesday\t384016667000\tConstruction work\tBetween Weinfelden and Kreuzlingen, engineering work is in progress.\tBetween Weinfelden and Kreuzlingen, engineering work is in progress. 
+2018-01-29 00:06:00.0\tMonday\t2018-01-29 00:06:00.0\tMonday\t0\tEnd of announcement\tNyon -  Coppet\tThe disruption between Nyon and Coppet on the Morges - Genève line is over.
+2018-01-29 00:06:00.0\tMonday\t2018-01-29 00:06:00.0\tMonday\t0\tEnd of announcement\tBern - Olten / Biel/Bienne\tThe disruption between Bern and Olten / Biel/Bienne is over.
+2018-01-29 00:06:00.0\tMonday\t2018-01-29 00:06:00.0\tMonday\t0\tEnd of announcement\tOlten - Bern Wankdorf\tThe disruption between Olten and Bern Wankdorf is over.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tRestriction\tBiel Mett -  Pieterlen\tCollision with animals
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tDisruption\tKonolfingen - Oberdiessbach\tTrack blocked by train.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tRestriction\tGenève - Nyon\tTechnical fault with the railway Installation
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tEnd of announcement\tGenève - Nyon\tThe disruption between Genève and Nyon is over.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tDisruption\tAllaman - Rolle\tBetween Allaman and Rolle on the Lausanne - Genève line, no train services are operating.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tDisruption\tAllaman - Rolle\tBetween Allaman and Rolle on the Lausanne - Genève line, no train services are operating.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tRestriction\tBern - Olten\tTrack blocked by train.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tDisruption\tSiggenthal-Würenlingen - Döttingen\tBetween Siggenthal-Würenlingen and Döttingen on the Turgi - Koblenz line, no train services are operating.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tDisruption\tSiggenthal-Würenlingen - Döttingen\tBetween Siggenthal-Würenlingen and Döttingen on the Turgi - Koblenz line, no train services are operating.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tRestriction\tZürich Stadelhofen - Zürich Tiefenbrunnen\tTechnical fault with the railway Installation
+2018-01-10 00:06:00.0\tWednesday\t2018-01-02 00:10:00.0\tTuesday\t-191933333000\tConstruction work\tBetween Schaffhausen and Diessenhofen.\tBetween Schaffhausen and Diessenhofen, engineering work is in progress. 
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tDisruption\tSiggenthal-Würenlingen - Döttingen\tBetween Siggenthal-Würenlingen and Döttingen on the Turgi - Koblenz line, no train services are operating.
+2018-01-18 00:06:00.0\tThursday\t2018-01-22 00:06:00.0\tMonday\t96000000000\tConstruction work\tBetween Cadenazzo and Locarno, engineering work is in progress.\tBetween Cadenazzo and Locarno, engineering work is in progress.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tEnd of announcement\tChénens -  Romont\tThe disruption between Chénens and Romont on the Fribourg/Freiburg - Lausanne line is over.
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tDisruption\tMuntelier-Löwenberg\tTechnical fault with the railway Installation
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tRestriction\tGenève - Nyon\tTechnical fault with the railway Installation
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tDisruption\tMuntelier-Löwenberg\tTechnical fault with the railway Installation
+2018-01-21 00:06:00.0\tSunday\t2018-01-21 00:06:00.0\tSunday\t0\tEnd of announcement\tKonolfingen - Oberdiessbach\tThe disruption between Konolfingen and Oberdiessbach on the Konolfingen - Thun line is over.
+2018-01-22 00:06:00.0\tMonday\t2018-01-22 00:06:00.0\tMonday\t0\tRestriction\tZürich Altstetten -  Birmensdorf ZH\tTechnical fault with the railway Installation
+2018-01-22 00:06:00.0\tMonday\t2018-01-22 00:06:00.0\tMonday\t0\tRestriction\tBern - Worblaufen\tTechnical fault with the railway Installation
+2018-01-22 00:06:00.0\tMonday\t2018-01-22 00:06:00.0\tMonday\t0\tEnd of announcement\tBern - Worblaufen\tThe disruption between Bern and Worblaufen is over.
+2018-01-22 00:06:00.0\tMonday\t2018-01-22 00:06:00.0\tMonday\t0\tDisruption\tBrig Bahnhofplatz (MGB) - Visp (MGB)\tBetween Brig Bahnhofplatz (MGB) and Visp (MGB), no train services are operating.
+2018-01-18 00:06:00.0\tThursday\t2018-01-18 00:06:00.0\tThursday\t0\tRestriction\tWettingen - Baden\tTechnical fault with the railway Installation
+2018-01-18 00:06:00.0\tThursday\t2018-01-18 00:06:00.0\tThursday\t0\tEnd of announcement\tWettingen\tThe disruption at Wettingen station has been cleared.
+2018-01-18 00:06:00.0\tThursday\t2018-01-18 00:06:00.0\tThursday\t0\tEnd of announcement\tWettingen\tThe disruption at Wettingen station has been cleared.
+2018-01-19 00:06:00.0\tFriday\t2018-01-19 00:06:00.0\tFriday\t0\tRestriction\tLa Plaine\tdamage to the track. 
+2018-01-19 00:06:00.0\tFriday\t2018-01-22 00:06:00.0\tMonday\t72000000000\tConstruction work\tBetween Locarno and Castione-Arbedo, engineering work is in progress.\tBetween Locarno and Castione-Arbedo, engineering work is in progress.
+2018-01-19 00:06:00.0\tFriday\t2018-01-19 00:06:00.0\tFriday\t0\tRestriction\tGenève-Aéroport\tTrack blocked by train.
+2018-01-19 00:06:00.0\tFriday\t2018-01-19 00:06:00.0\tFriday\t0\tRestriction\tLa Plaine - Genève\tdamage to the track. 
+2018-01-16 00:06:00.0\tTuesday\t2018-01-19 00:06:00.0\tFriday\t72000000000\tRestriction\tFrance\tStrike in France 
+2018-01-19 00:06:00.0\tFriday\t2018-01-20 00:06:00.0\tSaturday\t24000000000\tRestriction\tLa Plaine\tdamage to the track.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tRestriction\tZürich HB -  Zürich Oerlikon\tBetween Zürich HB and Zürich Oerlikon on the Zürich HB  - Zürich Flughafen / Winterthur / Schaffhausen line, only limited train services are operating.
+2018-01-20 00:06:00.0\tSaturday\t2018-01-20 00:06:00.0\tSaturday\t0\tRestriction\tZürich HB -  Zürich Oerlikon\tBetween Zürich HB and Zürich Oerlikon on the Zürich HB  - Zürich Flughafen / Winterthur / Schaffhausen line, only limited train services are operating.
+2018-01-30 00:06:00.0\tTuesday\t2018-01-30 00:06:00.0\tTuesday\t0\tEnd of announcement\tLenzburg -  Beinwil am See\tThe disruption between Lenzburg and Beinwil am See on the Lenzburg - Luzern line is over.
+2018-01-30 00:06:00.0\tTuesday\t2018-01-30 00:06:00.0\tTuesday\t0\tEnd of announcement\tWinterthur -  Pfungen\tThe disruption between Winterthur and Pfungen on the Winterthur - Bülach line is over.
+2018-01-30 00:06:00.0\tTuesday\t2018-01-30 00:06:00.0\tTuesday\t0\tDisruption\tWinterthur - Pfungen\tBetween Winterthur and Pfungen on the Winterthur - Bülach line, no train services are operating.
+2018-01-02 00:07:00.0\tTuesday\t2018-01-02 00:07:00.0\tTuesday\t0\tRestriction\tGenève -  Chambésy\tTechnical fault with the railway Installation
+2018-01-02 00:07:00.0\tTuesday\t2018-01-02 00:07:00.0\tTuesday\t0\tEnd of announcement\tGenève -  Chambésy\tThe disruption between Genève and Chambésy on the Genève - Nyon line is over.
+2018-01-02 00:07:00.0\tTuesday\t2018-01-02 00:07:00.0\tTuesday\t0\tEnd of announcement\tGrolley -  Payerne\tThe disruption between Grolley and Payerne on the Fribourg/Freiburg - Estavayer-le-Lac line is over.
+2018-01-03 00:07:00.0\tWednesday\t2018-01-07 00:07:00.0\tSunday\t96000000000\tDisruption\tMittelhäusern - Schwarzenburg\tStorm damages
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tEnd of announcement\tOthmarsingen\tThe disruption at Othmarsingen station has been cleared.
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tEnd of announcement\tDäniken -  Schönenwerd SO\tThe disruption between Däniken and Schönenwerd SO on the Olten - Aarau line is over.
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tRestriction\tOlten - Sissach\tTrack blocked by train. 
+2018-01-03 00:07:00.0\tWednesday\t2018-01-03 00:07:00.0\tWednesday\t0\tDisruption\tLes Hauts-Geneveys - La Chaux-de-Fonds\tdamage to the track.
+2018-01-01 00:07:00.0\tMonday\t2018-01-01 00:07:00.0\tMonday\t0\tDisruption\tBern - Köniz\tdamage to the track.
+2018-01-02 00:07:00.0\tTuesday\t2018-01-02 00:07:00.0\tTuesday\t0\tDisruption\tKreuzlingen - Konstanz\tTrack blocked by train.
+2018-01-04 00:07:00.0\tThursday\t2018-01-04 00:07:00.0\tThursday\t0\tRestriction\tVarese - Malpensa Aeroporto T1\tproblem with the overhead line
+2018-01-26 00:06:00.0\tFriday\t2018-01-29 00:06:00.0\tMonday\t72000000000\tRestriction\tFrance\tStrike in France 
+2018-01-28 00:06:00.0\tSunday\t2018-01-29 00:06:00.0\tMonday\t24000000000\tDisruption\tAlp Grüm - Poschiavo\tdamage to the track.
+2018-01-29 00:06:00.0\tMonday\t2018-01-29 00:06:00.0\tMonday\t0\tEnd of announcement\tSuhr\tThe disruption at Suhr station has been cleared.
+2018-01-04 00:07:00.0\tThursday\t2018-01-05 00:07:00.0\tFriday\t24000000000\tDisruption\tLes Hauts-Geneveys - La Chaux-de-Fonds\tdamage to the track.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-06 00:07:00.0\tSaturday\t0\tEnd of announcement\tZürich Wollishofen -  Kilchberg\tThe disruption between Zürich Wollishofen and Kilchberg on the Zürich Enge - Thalwil line is over.
+2018-01-05 00:07:00.0\tFriday\t2018-01-05 00:07:00.0\tFriday\t0\tEnd of announcement\tLuino (I) - Gallarate\tThe disruption between Luino (I) and Gallarate is over.
+2018-01-05 00:07:00.0\tFriday\t2018-01-05 00:07:00.0\tFriday\t0\tDisruption\tBülach - Hüntwangen-Wil\tderailment.
+2018-01-05 00:07:00.0\tFriday\t2018-01-06 00:07:00.0\tSaturday\t24000000000\tDisruption\tBülach - Hüntwangen-Wil\tderailment.
+2018-01-05 00:07:00.0\tFriday\t2018-01-06 00:07:00.0\tSaturday\t24000000000\tDisruption\tBülach - Eglisau\tderailment.
+2018-01-05 00:07:00.0\tFriday\t2018-01-05 00:07:00.0\tFriday\t0\tRestriction\tFrutigen - Visp\tTechnical fault with the railway Installation
+2018-01-05 00:07:00.0\tFriday\t2018-01-05 00:07:00.0\tFriday\t0\tRestriction\tCourtelary -  Sonceboz-Sombeval\tAnimals near the track
+2018-01-04 00:07:00.0\tThursday\t2018-01-05 00:07:00.0\tFriday\t24000000000\tDisruption\tLes Hauts-Geneveys - La Chaux-de-Fonds\tdamage to the track.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-06 00:07:00.0\tSaturday\t0\tDisruption\tBülach - Eglisau\tderailment.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-06 00:07:00.0\tSaturday\t0\tDisruption\tBülach - Eglisau\tderailment.
+2018-01-02 00:07:00.0\tTuesday\t2018-01-17 00:08:00.0\tWednesday\t360016667000\tConstruction work\tIn Winterthur station, engineering work is in progress.\tIn Winterthur station, engineering work is in progress.  S-Bahn trains S 30 are cancelled between Oberwinterthur and Winterthur. 
+2018-01-30 00:06:00.0\tTuesday\t2018-01-12 00:08:00.0\tFriday\t-431966667000\tConstruction work\tBetween Stein-Säckingen and Frick, engineering work is in progress.\tBetween Stein-Säckingen and Frick, engineering work is in progress.
+2018-01-07 00:07:00.0\tSunday\t2018-01-26 00:08:00.0\tFriday\t456016667000\tConstruction work\tBetween Albate-Camerlata and Mendrisio, engineering work is in progress.\tBetween Albate-Camerlata and Mendrisio, engineering work is in progress.
+2018-01-05 00:07:00.0\tFriday\t2018-01-08 00:07:00.0\tMonday\t72000000000\tRestriction\t(SNCF)\tStrike in France
+2018-01-08 00:07:00.0\tMonday\t2018-01-08 00:07:00.0\tMonday\t0\tDisruption\tWil SG - Uzwil\tObstacle on the tracks
+2018-01-04 00:07:00.0\tThursday\t2018-01-04 00:07:00.0\tThursday\t0\tDisruption\tLes Hauts-Geneveys - La Chaux-de-Fonds\tdamage to the track.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-06 00:07:00.0\tSaturday\t0\tRestriction\tZürich Stadelhofen - Zürich Tiefenbrunnen\tdamage to the track.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-06 00:07:00.0\tSaturday\t0\tRestriction\tZofingen -  Dagmersellen\tTechnical fault with the railway Installation
+2018-01-03 00:07:00.0\tWednesday\t2018-01-07 00:07:00.0\tSunday\t96000000000\tRestriction\tBülach -  Eglisau\tStorm damages
+2018-01-03 00:07:00.0\tWednesday\t2018-01-07 00:07:00.0\tSunday\t96000000000\tConstruction work\tBetween Como S. Giovanni and Milano, engineering work is in progress.\tUnscheduled construction work
+2018-01-06 00:07:00.0\tSaturday\t2018-01-07 00:07:00.0\tSunday\t24000000000\tRestriction\tGenève\tderailment.
+2018-01-07 00:07:00.0\tSunday\t2018-01-07 00:07:00.0\tSunday\t0\tDisruption\tChambrelien - Les Geneveys-sur-Coffrane\tConstruction work 
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tDisruption\tMuri AG - Sins\tTechnical fault with the railway Installation Duration  indefinite.
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tEnd of announcement\tKehrsatz -  Belp\tTrack blocked by train.
+2018-01-10 00:07:00.0\tWednesday\t2018-01-10 00:07:00.0\tWednesday\t0\tDisruption\tKehrsatz - Belp\tTrack blocked by train.
+2018-01-10 00:07:00.0\tWednesday\t2018-01-10 00:07:00.0\tWednesday\t0\tDisruption\tGümligen - Wichtrach\tThe disruption between Kehrsatz and Belp on the Bern Fischermätteli - Thun line is over.
+2018-01-10 00:07:00.0\tWednesday\t2018-01-10 00:07:00.0\tWednesday\t0\tDisruption\tCastione-Arbedo\tBetween Kehrsatz and Belp on the Bern Fischermätteli - Thun line, no train services are operating.
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tDisruption\tArdon - Sion\tBetween Gümligen and Wichtrach on the Bern - Thun line, no train services are operating.
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tEnd of announcement\tBrugg AG - Turgi\tObstacle on the tracks
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tRestriction\tSiegershausen\tTrack blocked by train.
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tDisruption\tSpiez - Leissigen\tThe disruption between Brugg AG and Turgi is over.
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tDisruption\tCastione-Arbedo\tTechnical fault with the railway Installation
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tConstruction work\tFribourg/Freiburg - Cressier FR\tTechnical fault with the railway Installation
+2018-01-11 00:07:00.0\tThursday\t2018-01-11 00:07:00.0\tThursday\t0\tDisruption\tBern Europaplatz - Köniz\tObstacle on the tracks
+2018-01-07 00:07:00.0\tSunday\t2018-01-20 00:08:00.0\tSaturday\t312016667000\tDisruption\tChur - St. Peter-Molinis\tBetween Fribourg/Freiburg and Cressier FR, no train services are operating. 
+2018-01-09 00:07:00.0\tTuesday\t2018-01-09 00:07:00.0\tTuesday\t0\tRestriction\tKreuzlingen / Kreuzlingen Hafen - Konstanz\tTrack blocked by train.
+2018-01-09 00:07:00.0\tTuesday\t2018-01-09 00:07:00.0\tTuesday\t0\tDisruption\tZiegelbrücke - Uznach\tproblem with the overhead line
+2018-01-10 00:07:00.0\tWednesday\t2018-01-10 00:07:00.0\tWednesday\t0\tConstruction work\tUznach - Ziegelbrücke\tTechnical fault with the railway Installation
+2018-01-15 00:06:00.0\tMonday\t2018-01-13 00:07:00.0\tSaturday\t-47983333000\tRestriction\tEpendes -  Yverdon-les-Bains\tLandslide
+2018-01-09 00:07:00.0\tTuesday\t2018-01-09 00:07:00.0\tTuesday\t0\tEnd of announcement\tEpendes -  Yverdon-les-Bains\tUnscheduled construction work
+2018-01-08 00:07:00.0\tMonday\t2018-01-10 00:07:00.0\tWednesday\t48000000000\tConstruction work\tBetween Vallorbe and Le Brassus, engineering work is in progress.\tBetween Uznach and Ziegelbrücke on the S4 Uznach - Sargans line, no train services are operating.
+2018-01-17 00:07:00.0\tWednesday\t2018-01-17 00:07:00.0\tWednesday\t0\tDisruption\tSt. Gallen Winkeln - St. Gallen Bruggen\tdamage to the track.
+2018-01-17 00:07:00.0\tWednesday\t2018-01-17 00:07:00.0\tWednesday\t0\tDisruption\tSt. Gallen Winkeln - St. Gallen Bruggen\tThe disruption between Ependes and Yverdon-les-Bains on the Lausanne - Yverdon-les-Bains line is over.
+2018-01-07 00:07:00.0\tSunday\t2018-01-01 00:08:00.0\tMonday\t-143983333000\tConstruction work\tIn Winterthur station, engineering work is in progress.\tBetween Vallorbe and Le Brassus, engineering work is in progress.
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tEnd of announcement\tThalwil - Sihlbrugg\tBetween St. Gallen Winkeln and St. Gallen Bruggen on the Gossau SG - St. Gallen line, no train services are operating.
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tConstruction work\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress.\tBetween St. Gallen Winkeln and St. Gallen Bruggen on the Gossau SG - St. Gallen line, no train services are operating.
+2018-01-07 00:05:00.0\tSunday\t2018-01-16 00:07:00.0\tTuesday\t216033333000\tRestriction\tSt. Gallen Bruggen -  St. Gallen Winkeln\tIn Winterthur station, engineering work is in progress.
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tSt. Gallen Bruggen -  St. Gallen Winkeln\tThe disruption between Thalwil and Sihlbrugg is over.
+2018-01-07 00:07:00.0\tSunday\t2018-01-27 00:08:00.0\tSaturday\t480016667000\tRestriction\tSt. Gallen Bruggen -  St. Gallen Winkeln\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress. 
+2018-01-12 00:07:00.0\tFriday\t2018-01-12 00:07:00.0\tFriday\t0\tRestriction\tSt. Gallen Bruggen -  St. Gallen Winkeln\tTechnical fault with the railway Installation
+2018-01-12 00:07:00.0\tFriday\t2018-01-12 00:07:00.0\tFriday\t0\tConstruction work\tSchaffhausen - Stein am Rhein\tTechnical fault with the railway Installation
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tZürich HB - Zürich Hardbrücke\tTechnical fault with the railway Installation
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tZürich HB - Zürich Hardbrücke\tTechnical fault with the railway Installation
+2018-01-01 00:07:00.0\tMonday\t2018-01-13 00:07:00.0\tSaturday\t288000000000\tRestriction\tSt. Gallen Bruggen -  St. Gallen Winkeln\tMaintenance work 
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tLeuk -  Salgesch\tTechnical fault with the railway Installation
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tLeuk -  Salgesch\tTechnical fault with the railway Installation
+2018-01-13 00:07:00.0\tSaturday\t2018-01-13 00:07:00.0\tSaturday\t0\tRestriction\tLeuk -  Salgesch\tTechnical fault with the railway Installation
+2018-01-14 00:07:00.0\tSunday\t2018-01-14 00:07:00.0\tSunday\t0\tConstruction work\tBetween Effretikon and Kemptthal engineering work is in progress.\tTrack blocked by train.
+2018-01-14 00:07:00.0\tSunday\t2018-01-14 00:07:00.0\tSunday\t0\tDisruption\tRomanshorn - Wittenbach\tTrack blocked by train.
+2018-01-14 00:07:00.0\tSunday\t2018-01-14 00:07:00.0\tSunday\t0\tDisruption\tWittenbach - Roggwil-Berg\tTrack blocked by train.
+2018-01-14 00:07:00.0\tSunday\t2018-01-16 00:07:00.0\tTuesday\t48000000000\tEnd of announcement\tLengnau -  Grenchen Nord\tBetween Effretikon and Kemptthal on the line Zürich HB - Winterthur, engineering work is in progress.
+2018-01-16 00:07:00.0\tTuesday\t2018-01-16 00:07:00.0\tTuesday\t0\tEnd of announcement\tBern - Bern Wankdorf\tpower failure.
+2018-01-16 00:07:00.0\tTuesday\t2018-01-16 00:07:00.0\tTuesday\t0\tEnd of announcement\tFribourg/Freiburg -  Rosé\tpower failure.
+2018-01-14 00:07:00.0\tSunday\t2018-01-14 00:07:00.0\tSunday\t0\tRestriction\tKloten -  Bassersdorf\tThe disruption between Lengnau and Grenchen Nord on the Biel/Bienne - Delémont line is over.
+2018-01-14 00:07:00.0\tSunday\t2018-01-14 00:07:00.0\tSunday\t0\tEnd of announcement\tKloten -  Bassersdorf\tThe disruption between Bern and Bern Wankdorf is over.
+2018-01-15 00:07:00.0\tMonday\t2018-01-15 00:07:00.0\tMonday\t0\tConstruction work\tDelémont - Delle\tThe disruption between Fribourg/Freiburg and Rosé on the Fribourg/Freiburg - Romont line is over.
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tDisruption\tErmatingen - Steckborn\tTechnical fault with the railway Installation
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tRestriction\tFribourg/Freiburg -  Rosé\tThe disruption between Kloten and Bassersdorf on the Kloten - Effretikon line is over.
+2018-01-06 00:07:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t336016667000\tRestriction\tRosé -  Romont\tBetween Delémont and Delle, no train services are operating.  Regional trains R/RE/RER/S are cancelled.
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tDisruption\tChambrelien - Les Hauts-Geneveys\tBetween Ermatingen and Steckborn on the Kreuzlingen - Stein am Rhein line, no train services are operating.
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tDisruption\tChambrelien - Les Hauts-Geneveys\tTechnical fault with the railway Installation
+2018-01-18 00:07:00.0\tThursday\t2018-01-18 00:07:00.0\tThursday\t0\tEnd of announcement\tChambrelien - Les Hauts-Geneveys\tTrack blocked by train.
+2018-01-23 00:07:00.0\tTuesday\t2018-01-24 00:07:00.0\tWednesday\t24000000000\tEnd of announcement\tWildegg -  Holderbank AG\tIncident with a road vehicle
+2018-01-23 00:07:00.0\tTuesday\t2018-01-24 00:07:00.0\tWednesday\t24000000000\tRestriction\tKonolfingen\tIncident with a road vehicle
+2018-01-23 00:07:00.0\tTuesday\t2018-01-24 00:07:00.0\tWednesday\t24000000000\tEnd of announcement\tBern - Olten\tThe disruption between Chambrelien and Les Hauts-Geneveys on the Neuchâtel - La Chaux-de-Fonds line is over.
+2018-01-24 00:07:00.0\tWednesday\t2018-01-24 00:07:00.0\tWednesday\t0\tEnd of announcement\tMitlödi -  Luchsingen-Hätzingen\tThe disruption between Wildegg and Holderbank AG on the Rupperswil - Brugg AG line is over.
+2018-01-24 00:07:00.0\tWednesday\t2018-01-24 00:07:00.0\tWednesday\t0\tTravel advice\tLes Avants -  Jor\tdamage to the track.
+2018-01-25 00:07:00.0\tThursday\t2018-01-25 00:07:00.0\tThursday\t0\tDisruption\tChamby - Les Avants\tThe disruption between Bern and Olten is over.
+2018-01-25 00:07:00.0\tThursday\t2018-01-26 00:07:00.0\tFriday\t24000000000\tRestriction\tOlten - Gelterkinden\tThe disruption between Mitlödi and Luchsingen-Hätzingen on the Ziegelbrücke - Linthal line is over.
+2018-01-25 00:07:00.0\tThursday\t2018-01-25 00:07:00.0\tThursday\t0\tEnd of announcement\tZürich Tiefenbrunnen -  Küsnacht ZH\tThe disruption between Les Avants and Jor on the Montreux - Montbovon line is over.
+2018-01-25 00:07:00.0\tThursday\t2018-01-25 00:07:00.0\tThursday\t0\tDisruption\tGais - Appenzell\tproblem with the overhead line
+2018-01-22 00:07:00.0\tMonday\t2018-01-22 00:07:00.0\tMonday\t0\tEnd of announcement\tOlten - Gelterkinden\tTechnical fault with the railway Installation
+2018-01-22 00:07:00.0\tMonday\t2018-01-22 00:07:00.0\tMonday\t0\tRestriction\tArth-Goldau - Bellinzona\tThe disruption between Zürich Tiefenbrunnen and Küsnacht ZH on the Zürich HB - Meilen line is over.
+2018-01-22 00:07:00.0\tMonday\t2018-01-22 00:07:00.0\tMonday\t0\tRestriction\tChiasso - Albate-Camerlata\tIncident with a road vehicle
+2018-01-22 00:07:00.0\tMonday\t2018-01-22 00:07:00.0\tMonday\t0\tDisruption\tZürich Tiefenbrunnen - Küsnacht ZH\tThe disruption between Olten and Gelterkinden is over.
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tRestriction\tArth-Goldau - Bellinzona\tproblem with the overhead line
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tRestriction\tArth-Goldau - Bellinzona\tTechnical fault with the railway Installation
+2018-01-22 00:07:00.0\tMonday\t2018-01-22 00:07:00.0\tMonday\t0\tRestriction\tArth-Goldau - Bellinzona\tBetween Zürich Tiefenbrunnen and Küsnacht ZH on the Zürich HB - Meilen line, no train services are operating.
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tRestriction\tArth-Goldau - Bellinzona\tproblem with the overhead line
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tDisruption\tBellegarde (Ain) - Culoz\tproblem with the overhead line
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tDisruption\tChambrelien - Les Hauts-Geneveys\tproblem with the overhead line
+2018-01-21 00:07:00.0\tSunday\t2018-01-21 00:07:00.0\tSunday\t0\tDisruption\tMoutier - Delémont\tproblem with the overhead line
+2018-01-23 00:07:00.0\tTuesday\t2018-01-23 00:07:00.0\tTuesday\t0\tDisruption\tMoutier - Delémont\tTrack blocked by train.
+2018-01-23 00:07:00.0\tTuesday\t2018-01-24 00:07:00.0\tWednesday\t24000000000\tEnd of announcement\tYvonand -  Cheyres\tIncident with a road vehicle
+2018-01-24 00:07:00.0\tWednesday\t2018-01-24 00:07:00.0\tWednesday\t0\tEnd of announcement\tZürich Binz - Zürich Triemli\tAnimals near the track
+2018-01-24 00:07:00.0\tWednesday\t2018-01-24 00:07:00.0\tWednesday\t0\tConstruction work\tBetween Aesch and Laufen, engineering work is in progress.\tAnimals near the track
+2018-01-25 00:07:00.0\tThursday\t2018-01-25 00:07:00.0\tThursday\t0\tRestriction\tEffretikon - Winterthur\tThe disruption between Yvonand and Cheyres on the Yverdon-les-Bains - Payerne line is over.
+2018-01-26 00:07:00.0\tFriday\t2018-01-26 00:07:00.0\tFriday\t0\tRestriction\tChiasso - Albate-Camerlata (Trenord)\tThe disruption between Zürich Binz and Zürich Triemli on the Zürich HB SZU - Uetliberg SZU line is over.
+2018-01-22 00:07:00.0\tMonday\t2018-01-27 00:07:00.0\tSaturday\t120000000000\tRestriction\tAlbate-Camerlata - Malpensa Aeroporto (Trenord)\tBetween Aesch and Laufen, engineering work is in progress.
+2018-01-19 00:07:00.0\tFriday\t2018-01-19 00:07:00.0\tFriday\t0\tRestriction\tLuino (I) - Gallarate (Trenord)\tproblem with the overhead line 
+2018-01-21 00:07:00.0\tSunday\t2018-01-22 00:07:00.0\tMonday\t24000000000\tRestriction\tWinterthur\tStrike in Italy
+2018-01-21 00:07:00.0\tSunday\t2018-01-22 00:07:00.0\tMonday\t24000000000\tRestriction\tNyon\tStrike in Italy
+2018-01-21 00:07:00.0\tSunday\t2018-01-22 00:07:00.0\tMonday\t24000000000\tRestriction\tNyon\tStrike in Italy
+2018-01-19 00:07:00.0\tFriday\t2018-01-19 00:07:00.0\tFriday\t0\tDisruption\tAmbérieu - Lyon-Part-Dieu\tTechnical fault with the railway Installation
+2018-01-20 00:07:00.0\tSaturday\t2018-01-20 00:07:00.0\tSaturday\t0\tDisruption\tDübendorf - Schwerzenbach ZH\tThe station Nyon between Genève - Lausanne can only be passed by a limited number of trains.
+2018-01-20 00:07:00.0\tSaturday\t2018-01-20 00:07:00.0\tSaturday\t0\tDisruption\tDübendorf - Schwerzenbach ZH\tThe station Nyon between Genève - Lausanne can only be passed by a limited number of trains.
+2018-01-20 00:07:00.0\tSaturday\t2018-01-20 00:07:00.0\tSaturday\t0\tRestriction\tGrolley -  Léchelles\tproblem with the overhead line
+2018-01-27 00:07:00.0\tSaturday\t2018-01-27 00:07:00.0\tSaturday\t0\tDisruption\tYverdon-les-Bains - Ste-Croix\tBetween Dübendorf and Schwerzenbach ZH, no train services are operating.
+2018-01-27 00:07:00.0\tSaturday\t2018-01-27 00:07:00.0\tSaturday\t0\tDisruption\tAltstätten SG - Oberriet\tBetween Dübendorf and Schwerzenbach ZH, no train services are operating.   - S-Bahn trains 5 are cancelled between Zürich HB and Uster.  - S-Bahn trains 9 are cancelled between Dübendorf and Uster.  - S-Bahn trains 14 are cancelled between Dübendorf and Schwerzenbach ZH.
+2018-01-27 00:07:00.0\tSaturday\t2018-01-27 00:07:00.0\tSaturday\t0\tDisruption\tHorn - Arbon\tdamage to the track.
+2018-01-27 00:07:00.0\tSaturday\t2018-01-27 00:07:00.0\tSaturday\t0\tRestriction\tAltstätten SG -  Oberriet\tdamage to the track.
+2018-01-01 00:08:00.0\tMonday\t2018-01-01 00:08:00.0\tMonday\t0\tEnd of announcement\tThun - Spiez\tdamage to the track.
+2018-01-01 00:08:00.0\tMonday\t2018-01-02 00:08:00.0\tTuesday\t24000000000\tDisruption\tHorn - Arbon\tFlood
+2018-01-01 00:08:00.0\tMonday\t2018-01-01 00:08:00.0\tMonday\t0\tConstruction work\tBetween Kreuzlingen and Weinfelden, engineering work is in progress.\tdamage to the track.
+2018-01-01 00:08:00.0\tMonday\t2018-01-01 00:08:00.0\tMonday\t0\tRestriction\tRichterswil - Bäch\tThe disruption between Thun and Spiez is over.
+2018-01-01 00:08:00.0\tMonday\t2018-01-02 00:08:00.0\tTuesday\t24000000000\tDisruption\tMonthey - Bouveret\tFlood
+2018-01-01 00:08:00.0\tMonday\t2018-01-02 00:08:00.0\tTuesday\t24000000000\tDisruption\tSt. Anton am Arlberg - Landeck-Zams\tBetween Kreuzlingen and Weinfelden, engineering work is in progress.
+2018-01-02 00:08:00.0\tTuesday\t2018-01-02 00:08:00.0\tTuesday\t0\tEnd of announcement\tBern - Olten\tFire near the tracks
+2018-01-02 00:08:00.0\tTuesday\t2018-01-02 00:08:00.0\tTuesday\t0\tRestriction\tBiel/Bienne - Ins\tTrack blocked by train.
+2018-01-02 00:08:00.0\tTuesday\t2018-01-03 00:08:00.0\tWednesday\t24000000000\tEnd of announcement\tNeuhausen Rheinfall -  Neuhausen\tLandslide
+2018-01-04 00:08:00.0\tThursday\t2018-01-04 00:08:00.0\tThursday\t0\tRestriction\tZürich Tiefenbrunnen\tThe disruption between Bern and Olten is over.
+2018-01-04 00:08:00.0\tThursday\t2018-01-04 00:08:00.0\tThursday\t0\tEnd of announcement\tZürich Tiefenbrunnen\tStorm damages
+2018-01-04 00:08:00.0\tThursday\t2018-01-04 00:08:00.0\tThursday\t0\tConstruction work\tBetween Bern and Worblaufen, engineering work is in progress.\tThe disruption between Neuhausen Rheinfall and Neuhausen on the Zürich HB - Schaffhausen line is over.
+2018-01-04 00:08:00.0\tThursday\t2018-01-05 00:08:00.0\tFriday\t24000000000\tRestriction\tVevey -  Villeneuve\tTrack blocked by train.
+2018-01-05 00:08:00.0\tFriday\t2018-01-05 00:08:00.0\tFriday\t0\tDisruption\tVevey - Villeneuve\tThe disruption at Zürich Tiefenbrunnen station has been cleared.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-05 00:08:00.0\tFriday\t48000000000\tDisruption\tVevey - Villeneuve\tBetween Bern and Worblaufen, engineering work is in progress.
+2018-01-05 00:08:00.0\tFriday\t2018-01-05 00:08:00.0\tFriday\t0\tEnd of announcement\tYverdon-les-Bains -  Essert-sous-Champvent\tUnscheduled construction work
+2018-01-05 00:08:00.0\tFriday\t2018-01-05 00:08:00.0\tFriday\t0\tRestriction\tYverdon-les-Bains - Ste-Croix\tUnscheduled construction work
+2018-01-05 00:08:00.0\tFriday\t2018-01-05 00:08:00.0\tFriday\t0\tDisruption\tYverdon-les-Bains - Essert-sous-Champvent\tUnscheduled construction work
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tEnd of announcement\tLa Chaux-de-Fonds -  Renan BE\tThe disruption between Yverdon-les-Bains and Essert-sous-Champvent on the Yverdon-les-Bains - Ste-Croix line is over.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-10 00:08:00.0\tWednesday\t168000000000\tEnd of announcement\tYverdon-les-Bains - Ste-Croix\tdamage to the track.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tEnd of announcement\tWinterthur\tTechnical fault with the railway Installation
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tDisruption\tYverdon-les-Bains - Essert-sous-Champvent\tThe disruption between La Chaux-de-Fonds and Renan BE on the La Chaux-de-Fonds - Sonceboz-Sombeval line is over.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tEnd of announcement\tBiel/Bienne - Ins\tThe disruption between Yverdon-les-Bains and Ste-Croix is over.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tRestriction\tZürich HB, Gleis 31 - 34\tThe disruption at Winterthur station has been cleared.
+2018-01-03 00:08:00.0\tWednesday\t2018-01-03 00:08:00.0\tWednesday\t0\tRestriction\tZürich HB, Gleis 31 - 34\tTechnical fault with the railway Installation
+2018-01-04 00:08:00.0\tThursday\t2018-01-05 00:08:00.0\tFriday\t24000000000\tRestriction\tPalézieux - Vevey\tThe disruption between Biel/Bienne and Ins is over.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tDisruption\tSchwanden GL - Linthal\tdamage to the track.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tDisruption\tAltstätten SG - Oberriet\tdamage to the track.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tDisruption\tAltstätten SG - Oberriet\tTrack blocked by train.
+2018-01-07 00:08:00.0\tSunday\t2018-01-08 00:08:00.0\tMonday\t24000000000\tDisruption\tRebstein-Marbach - Altstätten SG\tproblem with the overhead line
+2018-01-07 00:08:00.0\tSunday\t2018-01-08 00:08:00.0\tMonday\t24000000000\tDisruption\tRebstein-Marbach - Altstätten SG\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tDisruption\tRebstein-Marbach - Altstätten SG\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tDisruption\tAltstätten SG - Oberriet\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tDelay\tEC 10159 Basel SBB - Milano Centrale\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tEnd of announcement\tOrschweier -  Lahr (Schwarzw)\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tDisruption\tRebstein-Marbach - Altstätten SG\tdamage to the track.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tDisruption\tLenzburg - Eschenbach\tA technical difficulty with the train
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tConstruction work\tBetween Gelterkinden and Tecknau, engineering work is in progress.\tThe disruption between Orschweier and Lahr (Schwarzw) on the Freiburg (Breisgau) Hbf - Offenburg line is over.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tEnd of announcement\tUzwil -  Flawil\tdamage to the track.
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tConstruction work\tBière - Yens\tTechnical fault with the railway Installation
+2018-01-30 00:06:00.0\tTuesday\t2018-01-12 00:08:00.0\tFriday\t-431966667000\tRestriction\tYverdon-les-Bains -  Cheyres\tBetween Gelterkinden and Tecknau, engineering work is in progress.
+2018-01-12 00:08:00.0\tFriday\t2018-01-12 00:08:00.0\tFriday\t0\tRestriction\tHendschiken - Dottikon-Dintikon\tThe disruption between Uzwil and Flawil on the Wil SG - St. Gallen line is over.
+2018-01-24 00:07:00.0\tWednesday\t2018-01-12 00:08:00.0\tFriday\t-287983333000\tRestriction\tLuzern -  Ebikon\tConstruction work
+2018-01-13 00:08:00.0\tSaturday\t2018-01-13 00:08:00.0\tSaturday\t0\tDisruption\tBern - Worblaufen\tTechnical fault with the railway Installation
+2018-01-13 00:08:00.0\tSaturday\t2018-01-13 00:08:00.0\tSaturday\t0\tDisruption\tUzwil - Flawil\tTechnical fault with the railway Installation
+2018-01-14 00:08:00.0\tSunday\t2018-01-14 00:08:00.0\tSunday\t0\tDisruption\tUzwil - Flawil\tTrack blocked by train.
+2018-01-14 00:08:00.0\tSunday\t2018-01-15 00:08:00.0\tMonday\t24000000000\tDisruption\tUzwil - Flawil\tproblem with the overhead line
+2018-01-28 00:07:00.0\tSunday\t2018-01-28 00:07:00.0\tSunday\t0\tDisruption\tWillisau - Huttwil\tObstacle on the tracks
+2018-01-28 00:07:00.0\tSunday\t2018-01-28 00:07:00.0\tSunday\t0\tDisruption\tAuvernier - Noiraigue\tObstacle on the tracks
+2018-01-28 00:07:00.0\tSunday\t2018-01-28 00:07:00.0\tSunday\t0\tRestriction\tBaden - Brugg AG\tObstacle on the tracks
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:07:00.0\tTuesday\t0\tDisruption\tLyss - Aarberg\tBetween Willisau and Huttwil on the Luzern - Langenthal line, no train services are operating.
+2018-01-31 00:07:00.0\tWednesday\t2018-01-31 00:07:00.0\tWednesday\t0\tRestriction\tGenève -  La Plaine\tdamage to the track.
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:07:00.0\tTuesday\t0\tEnd of announcement\tGland\tdamage to the track.
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:07:00.0\tTuesday\t0\tDisruption\tFehraltorf - Pfäffikon ZH\tdamage to the track.
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:07:00.0\tTuesday\t0\tDisruption\tFehraltorf - Pfäffikon ZH\tTechnical fault with the railway Installation
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:07:00.0\tTuesday\t0\tDisruption\tSolothurn - Biberist Ost\tThe disruption at Gland station has been cleared.
+2018-01-31 00:07:00.0\tWednesday\t2018-01-31 00:07:00.0\tWednesday\t0\tRestriction\tWinterthur -  Winterthur Grüze\tTrack blocked by train.
+2018-01-31 00:07:00.0\tWednesday\t2018-01-31 00:07:00.0\tWednesday\t0\tRestriction\tHitzkirch\tTrack blocked by train.
+2018-01-01 00:08:00.0\tMonday\t2018-01-01 00:08:00.0\tMonday\t0\tDisruption\tStabio - Varese\tBetween Solothurn and Biberist Ost on the Solothurn - Burgdorf line, no train services are operating.
+2018-01-05 00:08:00.0\tFriday\t2018-01-05 00:08:00.0\tFriday\t0\tRestriction\tYverdon-les-Bains - Ste-Croix\tproblem with the overhead line
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tRestriction\tFontanivent\tdamage to the track.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tEnd of announcement\tStabio -  Varese\tTechnical fault with the railway Installation
+2018-01-06 00:08:00.0\tSaturday\t2018-01-10 00:08:00.0\tWednesday\t96000000000\tRestriction\tHitzkirch\tdamage to the track.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tDisruption\tZürich Wiedikon - Zürich Enge\tTrack blocked by train.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tEnd of announcement\tStabio -  Varese\tThe disruption between Stabio and Varese on the Mendrisio - Varese line is over.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tRestriction\tLugano - Ponte Tresa\tdamage to the track.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tEnd of announcement\tZürich Wiedikon - Zürich Enge\tBetween Zürich Wiedikon and Zürich Enge, no train services are operating.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tEnd of announcement\tSembrancher - Orsières\tThe disruption between Stabio and Varese on the Mendrisio - Varese line is over.
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tRestriction\tBern - Olten / Zofingen\tTechnical fault with the railway Installation
+2018-01-06 00:08:00.0\tSaturday\t2018-01-06 00:08:00.0\tSaturday\t0\tRestriction\tNeuchâtel -  St-Blaise-Lac\tThe disruption between Zürich Wiedikon and Zürich Enge is over.
+2018-01-07 00:08:00.0\tSunday\t2018-01-07 00:08:00.0\tSunday\t0\tEnd of announcement\tLenzburg -  Eschenbach\tThe disruption between Sembrancher and Orsières is over.
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tRestriction\tZürich HB Gl. 43/44\tTrack blocked by train.
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tEnd of announcement\tZürich HB Gl. 43/44\tTechnical fault with the railway Installation
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tConstruction work\tVevey - Blonay\tThe disruption between Lenzburg and Eschenbach on the Lenzburg - Luzern line is over.
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tDisruption\tSt. Gallen - Gossau SG\tTechnical fault with the railway Installation
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tEnd of announcement\tMatzingen - Frauenfeld\tThe disruption at Zürich HB Gl. 43/44 station has been cleared.
+2018-01-05 00:08:00.0\tFriday\t2018-01-09 00:08:00.0\tTuesday\t96000000000\tEnd of announcement\tNeuchâtel-Serrières -  Auvernier\tBetween Vevey and Blonay, no train services are operating.
+2018-01-08 00:08:00.0\tMonday\t2018-01-08 00:08:00.0\tMonday\t0\tConstruction work\tBetween Baden and Waldshut, engineering work is in progress.\tdamage to the track.
+2018-01-09 00:08:00.0\tTuesday\t2018-01-09 00:08:00.0\tTuesday\t0\tRestriction\tSuberg-Grossaffoltern\tThe disruption between Matzingen and Frauenfeld is over.
+2018-01-09 00:08:00.0\tTuesday\t2018-01-09 00:08:00.0\tTuesday\t0\tDisruption\tKüsnacht ZH - Erlenbach ZH\tThe disruption between Neuchâtel-Serrières and Auvernier on the Neuchâtel - Yverdon-les-Bains line is over.
+2018-01-25 00:03:00.0\tThursday\t2018-01-09 00:08:00.0\tTuesday\t-383916667000\tDisruption\tAuvernier - Champ-du-Moulin\tConstruction work
+2018-01-10 00:08:00.0\tWednesday\t2018-01-10 00:08:00.0\tWednesday\t0\tDisruption\tBouveret - St-Gingolph (Suisse)\tTrack blocked by train.
+2018-01-10 00:08:00.0\tWednesday\t2018-01-10 00:08:00.0\tWednesday\t0\tDisruption\tBouveret - St-Gingolph (Suisse)\tBetween Küsnacht ZH and Erlenbach ZH on the Zürich HB - Rapperswil line, no train services are operating.
+2018-01-10 00:08:00.0\tWednesday\t2018-01-10 00:08:00.0\tWednesday\t0\tEnd of announcement\tSteigbach -  Teufen\tdamage to the track.
+2018-01-21 00:08:00.0\tSunday\t2018-01-21 00:08:00.0\tSunday\t0\tDisruption\tYvonand - Yverdon-les-Bains\tTrack blocked by train.
+2018-01-21 00:08:00.0\tSunday\t2018-01-21 00:08:00.0\tSunday\t0\tRestriction\tYverdon-les-Bains - Ste-Croix\tTrack blocked by train.
+2018-01-21 00:08:00.0\tSunday\t2018-01-21 00:08:00.0\tSunday\t0\tRestriction\tSalgesch\tThe disruption between Steigbach and Teufen on the Appenzell - Teufen line is over.
+2018-01-21 00:08:00.0\tSunday\t2018-01-21 00:08:00.0\tSunday\t0\tDisruption\tGais - Appenzell\tdamage to the track.
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tRestriction\tAadorf -  Eschlikon\tUnscheduled construction work
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tDisruption\tAllaman - Gland\tanother train has broken down.
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tDisruption\tAllaman - Gland\tSmoke detected on the train
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tRestriction\tAllaman -  Gland\tproblem with the overhead line
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tDisruption\tLenzburg\tBetween Allaman and Gland on the Lausanne - Genève line, no train services are operating. 
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tRestriction\tSpiez -  Brig\tproblem with the overhead line Duration of  expected until  20:00.
+2018-01-22 00:08:00.0\tMonday\t2018-01-22 00:08:00.0\tMonday\t0\tRestriction\tZürich HB - Thalwil\tproblem with the overhead line
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tEnd of announcement\tLuzern -  Littau\tTrain services at Lenzburg station are suspended.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tDisruption\tTenero - Locarno\tTrack blocked by train.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tDisruption\tLuzern - Ebikon\tTrack blocked by train.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tDisruption\tSaland - Turbenthal\tThe disruption between Luzern and Littau on the Luzern - Wolhusen line is over.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tDisruption\tGivisiez - Belfaux-Village\tObstacle on the tracks
+2018-01-20 00:08:00.0\tSaturday\t2018-01-21 00:08:00.0\tSunday\t24000000000\tDisruption\tGivisiez - Belfaux-Village\tUnscheduled construction work
+2018-01-23 00:08:00.0\tTuesday\t2018-01-23 00:08:00.0\tTuesday\t0\tConstruction work\tBetween Zollikofen and Münchenbuchsee engineering work is in progress.\tproblem with the overhead line
+2018-01-23 00:08:00.0\tTuesday\t2018-01-23 00:08:00.0\tTuesday\t0\tEnd of announcement\tSaland -  Wila\tTrack blocked by train.
+2018-01-23 00:08:00.0\tTuesday\t2018-01-23 00:08:00.0\tTuesday\t0\tDisruption\tBern - Worblaufen\tTrack blocked by train.
+2018-01-03 00:11:00.0\tWednesday\t2018-01-19 00:11:00.0\tFriday\t384000000000\tEnd of announcement\tThun - Spiez\tConstruction work
+2018-01-23 00:08:00.0\tTuesday\t2018-01-23 00:08:00.0\tTuesday\t0\tDisruption\tBern - Worblaufen\tThe disruption between Saland and Wila on the Winterthur Grüze - Bauma line is over.
+2018-01-18 00:08:00.0\tThursday\t2018-01-18 00:08:00.0\tThursday\t0\tEnd of announcement\tHauptwil -  Bischofszell Stadt\tTechnical fault with the railway Installation
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tEnd of announcement\tBasel SBB - Saint-Louis (Haut-Rhin)\tThe disruption between Thun and Spiez is over.
+2018-01-14 00:08:00.0\tSunday\t2018-01-15 00:08:00.0\tMonday\t24000000000\tDisruption\tLenzburg - Hunzenschwil\tproblem with the overhead line
+2018-01-17 00:08:00.0\tWednesday\t2018-01-17 00:08:00.0\tWednesday\t0\tDisruption\tKehrsatz - Belp\tThe disruption between Hauptwil and Bischofszell Stadt on the St. Gallen - Weinfelden line is over.
+2018-01-17 00:08:00.0\tWednesday\t2018-01-17 00:08:00.0\tWednesday\t0\tDisruption\tLenzburg - Suhr\tThe disruption between Basel SBB and Saint-Louis (Haut-Rhin) is over.
+2018-01-17 00:08:00.0\tWednesday\t2018-01-17 00:08:00.0\tWednesday\t0\tRestriction\tSchiers -  Küblis\tTrack blocked by train.
+2018-01-17 00:08:00.0\tWednesday\t2018-01-17 00:08:00.0\tWednesday\t0\tDisruption\tFideris - Küblis\tproblem with the overhead line
+2018-01-17 00:08:00.0\tWednesday\t2018-01-17 00:08:00.0\tWednesday\t0\tTravel advice\t\tproblem with the overhead line
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tRestriction\tNyon -  Gland\tproblem with the overhead line
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tDisruption\tFideris - Küblis\tproblem with the overhead line
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tRestriction\tLenzburg -  Seon\t?Jungfraujoch - Top of Europe is sold out today. Other those travellers with valid tickets or seat reservations can be transported. The Jungfrau Railways thank you for your understanding.?
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tDisruption\tLenzburg - Beinwil am See\tdamage to the track.
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tEnd of announcement\tLenzburg -  Beinwil am See\tproblem with the overhead line
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tEnd of announcement\tCourtelary -  St-Imier\tObstacle on the tracks
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tDisruption\tKerzers - Neuchâtel\tObstacle on the tracks
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tDisruption\tKerzers - Neuchâtel\tThe disruption between Lenzburg and Beinwil am See on the Lenzburg - Luzern line is over.
+2018-01-15 00:08:00.0\tMonday\t2018-01-15 00:08:00.0\tMonday\t0\tEnd of announcement\tArth-Goldau - Bellinzona\tThe disruption between Courtelary and St-Imier on the Biel/Bienne - La Chaux-de-Fonds line is over.
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tEnd of announcement\tWallisellen - Dübendorf\tproblem with the overhead line
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tEnd of announcement\tWallisellen - Dietlikon\tproblem with the overhead line
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tDisruption\tMarin-Epagnier - Neuchâtel\tThe disruption between Arth-Goldau and Bellinzona is over.
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tDisruption\tWallisellen - Dietlikon\tThe disruption between Wallisellen and Dübendorf is over.
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tDisruption\tWallisellen - Dietlikon\tThe disruption between Wallisellen and Dietlikon is over.
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tRestriction\tWangen an der Aare -  Solothurn\tproblem with the overhead line
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tEnd of announcement\tSt. Gallen\tTrack blocked by train.
+2018-01-16 00:08:00.0\tTuesday\t2018-01-16 00:08:00.0\tTuesday\t0\tRestriction\tSt. Gallen\tTrack blocked by train.
+2018-01-19 00:08:00.0\tFriday\t2018-01-19 00:08:00.0\tFriday\t0\tEnd of announcement\tSt. Gallen\tBetween Wangen an der Aare and Solothurn on the Olten  - Solothurn line, only limited train services are operating.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tRestriction\tSchmitten -  Fribourg/Freiburg\tSt. Gallen station is open again without restrictions.
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tRestriction\tSchmitten -  Fribourg/Freiburg\tLarge build up of traffic
+2018-01-20 00:08:00.0\tSaturday\t2018-01-20 00:08:00.0\tSaturday\t0\tEnd of announcement\tBern -  Olten\tThe disruption at St. Gallen station has been cleared.
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tEnd of announcement\tBern -  Olten\tdamage to the track.
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tConstruction work\tSt. Gallen St. Fiden - Wittenbach\tproblem with the overhead line
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tDisruption\tYverdon-les-Bains\tThe disruption between Bern and Olten on the Bern - Zürich HB line is over.
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tConstruction work\tBetween Grolley and Fribourg, engineering work is in progress.\tThe disruption between Bern and Olten on the Bern - Zürich HB line is over.
+2018-01-08 00:04:00.0\tMonday\t2018-01-21 00:09:00.0\tSunday\t312083333000\tTravel advice\tNFB 478  - Lucens, centre | Billens, hôpital | Hennens, village - Romont FR, gare\tBetween St. Gallen St. Fiden and Wittenbach, no train services are operating.
+2018-01-28 00:08:00.0\tSunday\t2018-01-28 00:08:00.0\tSunday\t0\tTravel advice\tNFB 552  - Combremont-le-Grand, église &lt;-&gt; Estavayer-le-Lac, gare\tTrain services at Yverdon-les-Bains station are suspended.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-28 00:08:00.0\tSunday\t24000000000\tTravel advice\tNFB 260  - Jaun, Kappelboden &lt;-&gt; Bulle, gare\tBetween Grolley and Fribourg, engineering work is in progress.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-29 00:08:00.0\tMonday\t48000000000\tTravel advice\tNFB 339  - Chénens, gare &lt;-&gt; Rosé, gare\tFurther information is available at tpf.ch/bus-regionaux/.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-29 00:08:00.0\tMonday\t48000000000\tTravel advice\tBulle, gare &lt;-&gt; Fribourg, gare\tFurther information is available at tpf.ch/bus-regionaux/.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-29 00:08:00.0\tMonday\t48000000000\tEnd of announcement\tZürich Oerlikon\tFurther information is available at tpf.ch/bus-regionaux/.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-29 00:08:00.0\tMonday\t48000000000\tConstruction work\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress.\tFurther information is available at tpf.ch/bus-regionaux/.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-29 00:08:00.0\tMonday\t48000000000\tConstruction work\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress.\tFurther information is available at tpf.ch/bus-regionaux/.
+2018-01-29 00:08:00.0\tMonday\t2018-01-30 00:08:00.0\tTuesday\t24000000000\tEnd of announcement\tNebikon - Zofingen\tThe disruption at Zürich Oerlikon station has been cleared.
+2018-01-07 00:07:00.0\tSunday\t2018-01-30 00:08:00.0\tTuesday\t552016667000\tDisruption\tBirrwil - Seon\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress. 
+2018-01-07 00:07:00.0\tSunday\t2018-01-30 00:08:00.0\tTuesday\t552016667000\tEnd of announcement\tBern - Olten\tBetween Lausanne and Puidoux-Chexbres, engineering work is in progress. 
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tDisruption\tPalézieux - Ecublens-Rue\tThe disruption between Nebikon and Zofingen is over.
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tDisruption\tMaroggia-Melano - Mendrisio\tIncident with a road vehicle
+2018-01-30 00:08:00.0\tTuesday\t2018-01-30 00:08:00.0\tTuesday\t0\tDisruption\tDiessenhofen (Schifflände) - Stein am Rhein (Schifflände)\tThe disruption between Bern and Olten is over.
+2018-01-07 00:09:00.0\tSunday\t2018-01-07 00:09:00.0\tSunday\t0\tEnd of announcement\tVevey\tTechnical fault with the railway Installation
+2018-01-08 00:09:00.0\tMonday\t2018-01-08 00:09:00.0\tMonday\t0\tRestriction\tRivaz -  Vevey\tObstacle on the tracks
+2018-01-10 00:09:00.0\tWednesday\t2018-01-08 00:12:00.0\tMonday\t-47950000000\tRestriction\tRivaz -  Vevey\tlow water level
+2018-01-05 00:09:00.0\tFriday\t2018-01-05 00:09:00.0\tFriday\t0\tRestriction\tFribourg/Freiburg - Grolley - Fribourg/Freiburg - Belfaux-Village\tThe disruption at Vevey station has been cleared.
+2018-01-05 00:09:00.0\tFriday\t2018-01-05 00:09:00.0\tFriday\t0\tRestriction\tFribourg/Freiburg - Grolley - Fribourg/Freiburg - Belfaux-Village\tUnscheduled construction work
+2018-01-05 00:09:00.0\tFriday\t2018-01-05 00:09:00.0\tFriday\t0\tRestriction\tChiasso\tUnscheduled construction work
+2018-01-05 00:09:00.0\tFriday\t2018-01-05 00:09:00.0\tFriday\t0\tDisruption\tKreuzlingen Hafen - Altnau\tTechnical fault with the railway Installation
+2018-01-05 00:09:00.0\tFriday\t2018-01-05 00:09:00.0\tFriday\t0\tDisruption\tKreuzlingen Hafen - Altnau\tTechnical fault with the railway Installation
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tEnd of announcement\tBellinzona - Chiasso\tTrack blocked by train.
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tEnd of announcement\tKreuzlingen Hafen -  Altnau\tTechnical fault with the railway Installation
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tEnd of announcement\tRubigen -  Münsingen\tTechnical fault with the railway Installation
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tConstruction work\tBremgarten West and Wohlen AG,\tThe disruption between Bellinzona and Chiasso is over.
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tDisruption\tReiden\tThe disruption between Kreuzlingen Hafen and Altnau on the Kreuzlingen Hafen - Romanshorn line is over.
+2018-01-06 00:09:00.0\tSaturday\t2018-01-06 00:09:00.0\tSaturday\t0\tRestriction\tStabio - Varese\tThe disruption between Rubigen and Münsingen on the Bern - Thun line is over.
+2018-01-22 00:08:00.0\tMonday\t2018-01-28 00:09:00.0\tSunday\t144016667000\tDisruption\tFleurier - Buttes\tBetween Bremgarten West and Wohlen AG, engineering work is in progress. 
+2018-01-24 00:08:00.0\tWednesday\t2018-01-24 00:08:00.0\tWednesday\t0\tRestriction\tReiden\tThe station Reiden between Zofingen - Luzern, no train services are operating.
+2018-01-24 00:08:00.0\tWednesday\t2018-01-24 00:08:00.0\tWednesday\t0\tRestriction\tOlten -  Dulliken\tTechnical fault with the railway Installation
+2018-01-24 00:08:00.0\tWednesday\t2018-01-24 00:08:00.0\tWednesday\t0\tDisruption\tLenzburg - Suhr\tTechnical fault with the railway Installation
+2018-01-24 00:08:00.0\tWednesday\t2018-01-24 00:08:00.0\tWednesday\t0\tDisruption\tMurten/Morat\tThe station Reiden between Zofingen - Luzern can only be passed by a limited number of trains.
+2018-01-25 00:08:00.0\tThursday\t2018-01-25 00:08:00.0\tThursday\t0\tEnd of announcement\tOlten -  Bern\tTechnical fault with the railway Installation
+2018-01-25 00:08:00.0\tThursday\t2018-01-25 00:08:00.0\tThursday\t0\tDisruption\tLenzburg - Suhr\tIncident with a road vehicle
+2018-01-25 00:08:00.0\tThursday\t2018-01-25 00:08:00.0\tThursday\t0\tEnd of announcement\tBellinzona - Giubiasco\tPolice operation
+2018-01-25 00:08:00.0\tThursday\t2018-01-25 00:08:00.0\tThursday\t0\tConstruction work\tBetween Albate-Camerlata and Chiasso, engineering work is in progress.\tThe disruption between Olten and Bern on the Olten / Zofingen - Bern line is over.
+2018-01-25 00:08:00.0\tThursday\t2018-01-25 00:08:00.0\tThursday\t0\tRestriction\tSt. Gallen - Gossau SG\tIncident with a road vehicle
+2018-01-26 00:08:00.0\tFriday\t2018-01-26 00:08:00.0\tFriday\t0\tEnd of announcement\tAffoltern am Albis\tThe disruption between Bellinzona and Giubiasco is over.
+2018-01-07 00:07:00.0\tSunday\t2018-01-26 00:08:00.0\tFriday\t456016667000\tConstruction work\tIn Uster station, engineering work is in progress.\tBetween Albate-Camerlata and Chiasso, engineering work is in progress.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tDisruption\tYverdon-les-Bains - Ste-Croix\tUnscheduled construction work
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tDisruption\tEpendes - Yverdon-les-Bains\tThe disruption at Affoltern am Albis station has been cleared.
+2018-01-18 00:03:00.0\tThursday\t2018-01-24 00:11:00.0\tWednesday\t144133333000\tConstruction work\tBetween Effretikon and Kemptthal engineering work is in progress.\tIn Uster station, engineering work is in progress. 
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tRestriction\tEpendes -  Yverdon-les-Bains\tdamage to the track.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tEnd of announcement\tEpendes -  Yverdon-les-Bains\tBetween Ependes and Yverdon-les-Bains on the Lausanne - Yverdon-les-Bains line, no train services are operating.
+2018-01-25 00:08:00.0\tThursday\t2018-01-27 00:08:00.0\tSaturday\t48000000000\tRestriction\tNeyruz -  Chénens\tBetween Effretikon and Kemptthal on the line Zürich HB - Winterthur, engineering work is in progress.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tEnd of announcement\tNeyruz -  Chénens\tBetween Ependes and Yverdon-les-Bains on the Lausanne  - Yverdon-les-Bains line, only limited train services are operating.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-28 00:08:00.0\tSunday\t24000000000\tRestriction\tRupperswil -  Lenzburg\tThe disruption between Ependes and Yverdon-les-Bains on the Lausanne - Yverdon-les-Bains line is over.
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tRestriction\tFleurier - Neuchâtel\tPersons reported near to the tracks
+2018-01-27 00:08:00.0\tSaturday\t2018-01-27 00:08:00.0\tSaturday\t0\tRestriction\tGümligen -  Münsingen\tThe disruption between Neyruz and Chénens on the Fribourg/Freiburg - Lausanne line is over.
+2018-01-28 00:08:00.0\tSunday\t2018-01-28 00:08:00.0\tSunday\t0\tRestriction\tBern - Europaplatz - Bern - Bern Bümpliz Nord\tTechnical fault with the railway Installation
+2018-01-28 00:08:00.0\tSunday\t2018-01-28 00:08:00.0\tSunday\t0\tRestriction\tBern - Europaplatz - Bern - Bern Bümpliz Nord\tTechnical fault with the railway Installation
+2018-01-31 00:08:00.0\tWednesday\t2018-01-31 00:08:00.0\tWednesday\t0\tRestriction\tBern - Europaplatz - Bern - Bern Bümpliz Nord\tTrack blocked by train.
+2018-01-01 00:09:00.0\tMonday\t2018-01-01 00:09:00.0\tMonday\t0\tDisruption\tDulliken\tproblem with the overhead line
+2018-01-01 00:09:00.0\tMonday\t2018-01-01 00:09:00.0\tMonday\t0\tEnd of announcement\tSélestat -  Strasbourg Ville\tproblem with the overhead line
+2018-01-01 00:09:00.0\tMonday\t2018-01-01 00:09:00.0\tMonday\t0\tDisruption\tAndermatt - Nätschen\tproblem with the overhead line
+2018-01-02 00:09:00.0\tTuesday\t2018-01-02 00:09:00.0\tTuesday\t0\tTravel advice\tThe stop St. Gallen, Bahnhof has been moved.\tThe station Dulliken between Olten - Aarau, no train services are operating.
+2018-01-01 00:09:00.0\tMonday\t2018-01-01 00:09:00.0\tMonday\t0\tConstruction work\tBetween Wil SG and Weinfelden, engineering work is in progress.\tThe disruption between Sélestat and Strasbourg Ville on the Basel SBB - Strasbourg Ville line is over.
+2018-01-02 00:09:00.0\tTuesday\t2018-01-02 00:09:00.0\tTuesday\t0\tRestriction\tBasel SBB\tTechnical fault with the railway Installation 
+2018-01-31 00:08:00.0\tWednesday\t2018-01-03 00:09:00.0\tWednesday\t-671983333000\tDisruption\tGümmenen - Kerzers\tMajor event Eröffnungsfeierlichkeiten des Bahnhofplatzes in St.Gallen.
+2018-01-01 00:09:00.0\tMonday\t2018-01-03 00:09:00.0\tWednesday\t48000000000\tConstruction work\tBetween Feldkirch and Innsbruck, engineering work is in progress.\tBetween Wil SG and Weinfelden, engineering work is in progress.
+2018-01-03 00:09:00.0\tWednesday\t2018-01-03 00:09:00.0\tWednesday\t0\tRestriction\tCoppet -  Nyon\tTrack blocked by train.
+2018-01-03 00:09:00.0\tWednesday\t2018-01-03 00:09:00.0\tWednesday\t0\tDisruption\tMünsterlingen Spital - Landschlacht\tObstacle on the tracks
+2018-01-17 00:08:00.0\tWednesday\t2018-01-03 00:09:00.0\tWednesday\t-335983333000\tDisruption\tMarthalen - Dachsen\tBetween Feldkirch and Innsbruck, engineering work is in progress.
+2018-01-04 00:09:00.0\tThursday\t2018-01-04 00:09:00.0\tThursday\t0\tRestriction\tThörishaus Station -  Schmitten\tproblem with the overhead line
+2018-01-04 00:09:00.0\tThursday\t2018-01-04 00:09:00.0\tThursday\t0\tDisruption\tWinterthur - Henggart\tTechnical fault with the railway Installation
+2018-01-08 00:09:00.0\tMonday\t2018-01-08 00:09:00.0\tMonday\t0\tRestriction\tBern - Bern Wankdorf\tBetween Marthalen and Dachsen on the Winterthur - Schaffhausen line, no train services are operating.
+2018-01-08 00:09:00.0\tMonday\t2018-01-08 00:09:00.0\tMonday\t0\tRestriction\tSchönenwerd SO -  Aarau\tTrack blocked by train.
+2018-01-08 00:09:00.0\tMonday\t2018-01-08 00:09:00.0\tMonday\t0\tEnd of announcement\tVallorbe -  Le Day\tFire near the tracks
+2018-01-17 00:09:00.0\tWednesday\t2018-01-17 00:09:00.0\tWednesday\t0\tDisruption\tSchüpfen - Suberg-Grossaffoltern\tTrack blocked by train.
+2018-01-17 00:09:00.0\tWednesday\t2018-01-17 00:09:00.0\tWednesday\t0\tDisruption\tSchüpfen - Suberg-Grossaffoltern\tTrack blocked by train.
+2018-01-17 00:09:00.0\tWednesday\t2018-01-17 00:09:00.0\tWednesday\t0\tRestriction\tWinterthur -  Oberwinterthur\tThe disruption between Vallorbe and Le Day on the Vallorbe - Le Brassus line is over.
+2018-01-19 00:09:00.0\tFriday\t2018-01-19 00:09:00.0\tFriday\t0\tEnd of announcement\tPieterlen -  Lengnau\tTechnical fault with the railway Installation
+2018-01-19 00:09:00.0\tFriday\t2018-01-19 00:09:00.0\tFriday\t0\tDisruption\tBeinwil am See - Hitzkirch\tTechnical fault with the railway Installation
+2018-01-19 00:09:00.0\tFriday\t2018-01-19 00:09:00.0\tFriday\t0\tDisruption\tKüsnacht ZH - Erlenbach ZH\tTechnical fault with the railway Installation
+2018-01-19 00:09:00.0\tFriday\t2018-01-19 00:09:00.0\tFriday\t0\tDisruption\tKüsnacht ZH - Erlenbach ZH\tThe disruption between Pieterlen and Lengnau on the Biel/Bienne - Moutier / Solothurn line is over.
+2018-01-17 00:09:00.0\tWednesday\t2018-01-17 00:09:00.0\tWednesday\t0\tDisruption\tKüsnacht ZH - Erlenbach ZH\tTechnical fault with the railway Installation
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tDisruption\tKüsnacht ZH - Erlenbach ZH\tBetween Küsnacht ZH and Erlenbach ZH on the Zürich HB - Meilen line, no train services are operating.
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tRestriction\tBern -  Ostermundigen\tBetween Küsnacht ZH and Erlenbach ZH on the Zürich HB - Meilen line, no train services are operating.   - S-Bahn trains S 6 are cancelled between Küsnacht ZH and Erlenbach ZH.  - S-Bahn trains S 7 are cancelled between Küsnacht ZH and Meilen.  - S-Bahn trains S 16 are cancelled between Zürich Tiefenbrunnen and Erlenbach ZH.
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tEnd of announcement\tBern -  Ostermundigen\tBetween Küsnacht ZH and Erlenbach ZH on the Zürich HB - Meilen line, no train services are operating.   - S-Bahn trains S 6 are cancelled between Küsnacht ZH and Erlenbach ZH.  - S-Bahn trains S 7 are cancelled between Küsnacht ZH and Meilen.  - S-Bahn trains S 16 are cancelled between Zürich Tiefenbrunnen and Herrliberg-Feldmeilen.
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tRestriction\tArth-Goldau - Bellinzona\tBetween Küsnacht ZH and Erlenbach ZH on the Zürich HB - Meilen line, no train services are operating.   - S-Bahn trains S 6 are cancelled between Küsnacht ZH and Erlenbach ZH.  - S-Bahn trains S 7 are cancelled between Küsnacht ZH and Meilen.  - S-Bahn trains S 16 are cancelled between Zürich Tiefenbrunnen and Herrliberg-Feldmeilen.
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tEnd of announcement\tOlten - Bern\tPersons reported near to the tracks
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tConstruction work\tBetween Bad Zurzach and Bülach, engineering work is in progress.\tThe disruption between Bern and Ostermundigen on the Bern - Thun line is over.
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tRestriction\tZürich HB, Gleis 31 - 34\tTechnical fault with the railway Installation
+2018-01-18 00:09:00.0\tThursday\t2018-01-18 00:09:00.0\tThursday\t0\tRestriction\tBelfaux-Village -  Murten/Morat\tThe disruption between Olten and Bern is over.
+2018-01-13 00:08:00.0\tSaturday\t2018-01-12 00:10:00.0\tFriday\t-23966667000\tRestriction\tArth-Goldau - Bellinzona (Gotthard-Basistunnel)\tBetween Bad Zurzach and Bülach, engineering work is in progress. 
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tArth-Goldau - Bellinzona (Gotthard-Basistunnel)\tTechnical fault with the railway Installation
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tKemptthal -  Effretikon\tTechnical fault with the railway Installation
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tKemptthal -  Effretikon\tproblem with the overhead line
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tTravel advice\tBrunnadern-Neckertal, Bahnhof - Herisau, Bahnhof\tproblem with the overhead line
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tArth-Goldau - Bellinzona (Gotthard-Basistunnel)\tdamage to the track.
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tLa Chaux-de-Fonds - Le Locle\tdamage to the track.
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tDisruption\tSt. Gallen AB - St. Gallen Spisertor\tLarge build up of traffic
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tConstruction work\tIn Sirnach station, engineering work is in progress.\tproblem with the overhead line
+2018-01-12 00:09:00.0\tFriday\t2018-01-13 00:09:00.0\tSaturday\t24000000000\tRestriction\tEbikon - Rotkreuz\tdamage to the track.
+2018-01-12 00:09:00.0\tFriday\t2018-01-12 00:09:00.0\tFriday\t0\tRestriction\tEbikon - Rotkreuz\tObstacle on the tracks
+2018-01-11 00:09:00.0\tThursday\t2018-01-14 00:09:00.0\tSunday\t72000000000\tRestriction\tEbikon -  Rotkreuz\tConstruction work 
+2018-01-09 00:09:00.0\tTuesday\t2018-01-09 00:09:00.0\tTuesday\t0\tEnd of announcement\tEbikon -  Rotkreuz\tBetween Ebikon and Rotkreuz on the Luzern - Rotkreuz line, no train services are operating.
+2018-01-09 00:09:00.0\tTuesday\t2018-01-09 00:09:00.0\tTuesday\t0\tEnd of announcement\tLeuk -  Sierre/Siders\tBetween Ebikon and Rotkreuz on the Luzern - Rotkreuz line, no train services are operating.
+2018-01-09 00:09:00.0\tTuesday\t2018-01-09 00:09:00.0\tTuesday\t0\tDisruption\tBiel/Bienne - Biel Mett\tBetween Ebikon and Rotkreuz on the Luzern  - Rotkreuz line, only limited train services are operating.
+2018-01-09 00:09:00.0\tTuesday\t2018-01-09 00:09:00.0\tTuesday\t0\tRestriction\tBiel/Bienne - Biel Mett\tThe disruption between Ebikon and Rotkreuz on the Luzern - Rotkreuz line is over.
+2018-01-09 00:09:00.0\tTuesday\t2018-01-09 00:09:00.0\tTuesday\t0\tRestriction\tBiel/Bienne - Biel Mett\tThe disruption between Leuk and Sierre/Siders on the Visp - Sion line is over.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tEnd of announcement\tGiubiasco\tBetween Biel/Bienne and Biel Mett on the Biel/Bienne - Grenchen Nord / Solothurn line, no train services are operating.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tDisruption\tKreuzlingen - Konstanz\tBetween Biel/Bienne and Biel Mett on the Biel/Bienne  - Solothurn line, only limited train services are operating.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tDisruption\tKreuzlingen - Konstanz\tBetween Biel/Bienne and Biel Mett on the Biel/Bienne  - Solothurn line, only limited train services are operating.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tDisruption\tNyon - Allaman\tThe disruption at Giubiasco station has been cleared.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tRestriction\tNyon - Allaman\tTrack blocked by train.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tEnd of announcement\tNyon -  Allaman\tTrack blocked by train.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tDisruption\tNyon\tBetween Nyon and Allaman on the Genève - Lausanne line, no train services are operating.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tDisruption\tNyon\tBetween Nyon and Allaman on the Genève - Lausanne line, no train services are operating.
+2018-01-10 00:09:00.0\tWednesday\t2018-01-10 00:09:00.0\tWednesday\t0\tEnd of announcement\tNyon\tThe disruption between Nyon and Allaman on the Genève - Lausanne line is over.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tEnd of announcement\tGrellingen -  Zwingen\tTrack blocked by train.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tRestriction\tBasel SBB -  Basel Dreispitz\tTrack blocked by train.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tRestriction\tMünsingen - Thun\tThe disruption at Nyon station has been cleared.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tConstruction work\tBetween St-Prex and Allaman engineering work is in progress.\tThe disruption between Grellingen and Zwingen on the Basel SBB - Delémont line is over.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tRestriction\tZürich HB SZU -  Zürich Selnau (SZU)\tThe disruption between Basel SBB and Basel Dreispitz on the Basel SBB - Delèmont line is over.
+2018-01-14 00:09:00.0\tSunday\t2018-01-14 00:09:00.0\tSunday\t0\tEnd of announcement\tZürich HB SZU -  Zürich Selnau\tConstruction work
+2018-01-15 00:09:00.0\tMonday\t2018-01-17 00:09:00.0\tWednesday\t48000000000\tConstruction work\tEstavayer-le-Lac - Payerne\tBetween St-Prex and Allaman on the line Lausanne - Genève-Aeroport, engineering work is in progress.
+2018-01-16 00:09:00.0\tTuesday\t2018-01-16 00:09:00.0\tTuesday\t0\tDisruption\tBurgdorf Buchmatt\tdamage to the track.
+2018-01-16 00:09:00.0\tTuesday\t2018-01-16 00:09:00.0\tTuesday\t0\tRestriction\tLuzern\tThe disruption between Zürich HB SZU and Zürich Selnau on the Zürich HB SZU - Zürich Giesshübel line is over.
+2018-01-06 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t504000000000\tEnd of announcement\tBern - Bern Wankdorf\tBetween Estavayer-le-Lac and Payerne, no train services are operating.
+2018-01-15 00:09:00.0\tMonday\t2018-01-15 00:09:00.0\tMonday\t0\tEnd of announcement\tZürich Oerlikon\tTrack blocked by train.
+2018-01-15 00:09:00.0\tMonday\t2018-01-15 00:09:00.0\tMonday\t0\tRestriction\tBern - Olten / Zofingen\tTechnical fault with the railway Installation
+2018-01-15 00:09:00.0\tMonday\t2018-01-15 00:09:00.0\tMonday\t0\tRestriction\tPuidoux-Chexbres - Palézieux\tThe disruption between Bern and Bern Wankdorf is over.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tRestriction\tPuidoux-Chexbres - Palézieux\tThe disruption at Zürich Oerlikon station has been cleared.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tDisruption\tWynigen - Herzogenbuchsee\tTrack blocked by train.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tRestriction\tPuidoux-Chexbres - Palézieux\tdamage to the track.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tEnd of announcement\tEschenbach -  Hochdorf\tdamage to the track.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tConstruction work\tIn Renens VD station, engineering work is in progress.\tTechnical fault with the railway Installation
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tConstruction work\tIn Renens VD station, engineering work is in progress.\tdamage to the track.
+2018-01-21 00:09:00.0\tSunday\t2018-01-22 00:09:00.0\tMonday\t24000000000\tDisruption\tIns - Brüttelen\tThe disruption between Eschenbach and Hochdorf on the Luzern - Lenzburg line is over.
+2018-01-13 00:10:00.0\tSaturday\t2018-01-15 00:10:00.0\tMonday\t48000000000\tConstruction work\tBetween Heerbrugg and Altstätten SG.\tIn Renens VD station, engineering work is in progress.
+2018-01-13 00:10:00.0\tSaturday\t2018-01-15 00:10:00.0\tMonday\t48000000000\tRestriction\tGenève - Lyon-Part-Dieu\tIn Renens VD station, engineering work is in progress.
+2018-01-21 00:09:00.0\tSunday\t2018-01-21 00:09:00.0\tSunday\t0\tDisruption\tGümligen - Worb SBB\tOperational malfunction Duration  from 21.09.2018 09:15 until 21.09.2018 11:45.
+2018-01-26 00:08:00.0\tFriday\t2018-01-24 00:09:00.0\tWednesday\t-47983333000\tEnd of announcement\tSteinmaur -  Niederweningen\tBetween Heerbrugg and Altstätten SG, engineering work is in progress. 
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tEnd of announcement\tKerzers\tproblem with the overhead line
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tRestriction\tSpiez -  Visp\tTrack blocked by train.
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tRestriction\tGenève - Lyon-Part-Dieu\tThe disruption between Steinmaur and Niederweningen on the Zürich HB - Niederweningen line is over.
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tEnd of announcement\tSisikon -  Brunnen\tThe disruption at Kerzers station has been cleared.
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tConstruction work\tIn Wohlen AG station, engineering work is in progress.\tTrack blocked by train.
+2018-01-24 00:09:00.0\tWednesday\t2018-01-24 00:09:00.0\tWednesday\t0\tDisruption\tFrauenfeld - Frauenfeld Marktplatz\tproblem with the overhead line
+2018-01-25 00:09:00.0\tThursday\t2018-01-25 00:09:00.0\tThursday\t0\tRestriction\tGiubiasco\tThe disruption between Sisikon and Brunnen on the Erstfeld - Arth-Goldau line is over.
+2018-01-30 00:07:00.0\tTuesday\t2018-01-26 00:11:00.0\tFriday\t-95933333000\tRestriction\tGiubiasco\tIn Wohlen AG station, engineering work is in progress.
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tDisruption\tCroy-Romainmôtier - Arnex\tIncident with a road vehicle
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tDisruption\tBiasca - Lugano\tTechnical fault with the railway Installation
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tDisruption\tBellinzona\tTechnical fault with the railway Installation
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tDisruption\tBellinzona\tFire near the tracks
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tDisruption\tCornaux\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tEnd of announcement\tLangenthal - St. Urban Ziegelei\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tRestriction\tGrellingen -  Zwingen\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tRestriction\tEvionnaz -  Charrat-Fully\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tDisruption\tRheineck - Walzenhausen\tThe disruption between Langenthal and St. Urban Ziegelei is over.
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tConstruction work\tVevey - Blonay\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tConstruction work\tBetween Winterthur and Frauenfeld, engineering work is in progress.\tUnscheduled construction work
+2018-01-27 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t0\tRestriction\tOlten - Aarau\tA technical difficulty with the train
+2018-01-23 00:09:00.0\tTuesday\t2018-01-28 00:09:00.0\tSunday\t120000000000\tEnd of announcement\tOlten - Aarau\tBetween Vevey and Blonay, no train services are operating. 
+2018-01-16 00:09:00.0\tTuesday\t2018-01-28 00:09:00.0\tSunday\t288000000000\tDisruption\tWil SG - Bronschhofen\tBetween Winterthur and Frauenfeld, engineering work is in progress.
+2018-01-25 00:09:00.0\tThursday\t2018-01-25 00:09:00.0\tThursday\t0\tRestriction\tGrellingen -  Zwingen\tBetween Olten and Aarau only limited train services are operating.   - Long-distance trains IR 17 are cancelled between Olten and Zürich HB.  - S-Bahn trains S23 are cancelled between Olten and Aarau.  - S-Bahn trains S29 are cancelled between Langenthal and Aarau.
+2018-01-25 00:09:00.0\tThursday\t2018-01-25 00:09:00.0\tThursday\t0\tConstruction work\tEstavayer-le-Lac - Payerne\tThe disruption between Olten and Aarau is over.
+2018-01-25 00:09:00.0\tThursday\t2018-01-25 00:09:00.0\tThursday\t0\tDisruption\tGoldach - Rorschach\tBetween Wil SG and Bronschhofen, no train services are operating.
+2018-01-26 00:09:00.0\tFriday\t2018-01-26 00:09:00.0\tFriday\t0\tDisruption\tStettbach - Dietlikon\tTechnical fault with the railway Installation
+2018-01-06 00:09:00.0\tSaturday\t2018-01-27 00:09:00.0\tSaturday\t504000000000\tDisruption\tRheineck - Walzenhausen\tBetween Estavayer-le-Lac and Payerne, no train services are operating.
+2018-01-28 00:09:00.0\tSunday\t2018-01-28 00:09:00.0\tSunday\t0\tEnd of announcement\tEbikon -  Gisikon-Root\tBetween Goldach and Rorschach on the St. Gallen - Rorschach line, no train services are operating.
+2018-01-28 00:09:00.0\tSunday\t2018-01-28 00:09:00.0\tSunday\t0\tRestriction\tGiubiasco\tTechnical fault with the railway Installation
+2018-01-27 00:09:00.0\tSaturday\t2018-01-28 00:09:00.0\tSunday\t24000000000\tEnd of announcement\tGiubiasco\tTrack blocked by train.
+2018-01-28 00:09:00.0\tSunday\t2018-01-28 00:09:00.0\tSunday\t0\tRestriction in rail traffic\tZürich HB - Rapperswil\tThe disruption between Ebikon and Gisikon-Root on the Luzern - Zug line is over.
+2018-01-28 00:09:00.0\tSunday\t2018-01-28 00:09:00.0\tSunday\t0\tEnd of announcement\tUetikon -  Stäfa\tTechnical fault with the railway Installation
+2018-01-28 00:09:00.0\tSunday\t2018-01-28 00:09:00.0\tSunday\t0\tRestriction in rail traffic\tBern - Olten / Zofingen\tThe disruption at Giubiasco station has been cleared.
+2018-01-10 00:10:00.0\tWednesday\t2018-01-10 00:10:00.0\tWednesday\t0\tRestriction\tBrig - Domodossola (I)\tproblem with the overhead line.
+2018-01-10 00:10:00.0\tWednesday\t2018-01-10 00:10:00.0\tWednesday\t0\tEnd of announcement\tVarzo -  Domodossola (I)\tThe disruption between Uetikon and Stäfa on the Zürich HB - Rapperswil line is over.
+2018-01-09 00:10:00.0\tTuesday\t2018-01-09 00:10:00.0\tTuesday\t0\tRestriction\tBrig - Domodossola (I)\ttechnical fault with the railway Installation.
+2018-01-09 00:10:00.0\tTuesday\t2018-01-09 00:10:00.0\tTuesday\t0\tConstruction work\tLes Bois - La Chaux-de-Fonds 286/295 Les Bois - La Chaux-de-Fonds\ttechnical fault with the railway Installation.
+2018-01-09 00:10:00.0\tTuesday\t2018-01-09 00:10:00.0\tTuesday\t0\tConstruction work\tBetween Buchs SG and Sargans engineering work is in progress.\tThe disruption between Varzo and Domodossola (I) on the Brig - Domodossola (I) line is over.
+2018-01-09 00:10:00.0\tTuesday\t2018-01-09 00:10:00.0\tTuesday\t0\tConstruction work\tBetween Thalwil and Wädenswil, engineering work is in progress.\ttechnical fault with the railway Installation.
+2018-01-09 00:10:00.0\tTuesday\t2018-01-09 00:10:00.0\tTuesday\t0\tRestriction in rail traffic\tBern - Bern Wankdorf\tBetween Les Bois and La Chaux-de-Fonds, engineering work is in progress. 
+2018-01-08 00:10:00.0\tMonday\t2018-01-12 00:10:00.0\tFriday\t96000000000\tRestriction\tLausanne -  Vevey\tBetween Buchs SG and Sargans on the line Uznach - Sargans, engineering work is in progress.
+2018-01-19 00:09:00.0\tFriday\t2018-01-25 00:10:00.0\tThursday\t144016667000\tEnd of announcement\tLausanne -  Vevey\tBetween Thalwil and Wädenswil, engineering work is in progress.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tThalwil - Pfäffikon SZ\ttrack blocked by train.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tMuttenz\ttrack blocked by train.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tTravel advice\tFribourg, Bonnesfontaines - Villars-sur-Glâne, gare\tThe disruption between Lausanne and Vevey on the Lausanne - Sion - Brig line is over.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tTravel advice\tFribourg, Guintzet - Fribourg, Musy 4\ttrack blocked by train.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tDisruption\tAmbérieu -  Lyon-Perrache\tTrain services at Muttenz station are suspended.
+2018-01-07 00:10:00.0\tSunday\t2018-01-07 00:10:00.0\tSunday\t0\tRestriction in rail traffic\tAarau - Schöftland\tmajor event Course Morat-Fribourg
+2018-01-07 00:10:00.0\tSunday\t2018-01-07 00:10:00.0\tSunday\t0\tRestriction in rail traffic\tMuttenz\tmajor event Course Morat-Fribourg
+2018-01-03 00:10:00.0\tWednesday\t2018-01-03 00:10:00.0\tWednesday\t0\tEnd of announcement\tGöschenen - Andermatt\tobstacle on the tracks.
+2018-01-03 00:10:00.0\tWednesday\t2018-01-03 00:10:00.0\tWednesday\t0\tRestriction in rail traffic\tMuttenz\tproblem with the overhead line.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tGossau SG - Kradolf\tThe rail traffic at the station Muttenz is affected.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tLausanne - Vevey\tThe disruption between Göschenen and Andermatt is over.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tConstruction work\tGstaad - Zweisimmen\tThe rail traffic at the station Muttenz is affected.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tTravel advice\tRiggisberg, Post -\tdamage to the track.
+2018-01-04 00:10:00.0\tThursday\t2018-01-04 00:10:00.0\tThursday\t0\tRestriction\tPuidoux-Chexbres - Palézieux\ttrack blocked by train.
+2018-01-01 00:10:00.0\tMonday\t2018-01-05 00:10:00.0\tFriday\t96000000000\tDisruption\tLugano - Maroggia-Melano\tBetween Gstaad and Zweisimmen, no train services are operating. 
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tDisruption\tLugano - Maroggia-Melano\tMajor event Alpabzug Warmesite 
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tDisruption\tLa Chaux-de-Fonds\tdamage to the track.
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tEnd of announcement\tLugano -  Maroggia-Melano\tFire near the tracks
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tDisruption\tZürich Oerlikon - Wallisellen\tFire near the tracks
+2018-01-29 00:09:00.0\tMonday\t2018-01-30 00:09:00.0\tTuesday\t24000000000\tConstruction work\tBetween Effretikon and Kemptthal engineering work is in progress.\tFire at the Station .
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tEnd of announcement\tFribourg/Freiburg -  Rosé\tThe disruption between Lugano and Maroggia-Melano on the Lugano - Chiasso line is over.
+2018-01-23 00:09:00.0\tTuesday\t2018-01-23 00:09:00.0\tTuesday\t0\tDisruption\tKiesen\tBetween Zürich Oerlikon and Wallisellen, no train services are operating.
+2018-01-21 00:09:00.0\tSunday\t2018-01-24 00:09:00.0\tWednesday\t72000000000\tDisruption\tKiesen\tBetween Effretikon and Kemptthal on the line Zürich HB - Winterthur, engineering work is in progress.
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tDisruption\tLa Chaux-de-Fonds\tThe disruption between Fribourg/Freiburg and Rosé on the Fribourg/Freiburg - Romont line is over.
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tRestriction\tRorschach Hafen (See) - Rheineck Schifflände\tThe station Kiesen between Bern - Thun, no train services are operating.
+2018-01-29 00:09:00.0\tMonday\t2018-01-29 00:09:00.0\tMonday\t0\tConstruction work\tBetween Schaffhausen and Diessenhofen, engineering work is in progress.\tThe station Kiesen between Bern - Thun, no train services are operating.
+2018-01-29 00:09:00.0\tMonday\t2018-01-30 00:09:00.0\tTuesday\t24000000000\tRestriction\tLausanne - Martigny\tFire at the Station .
+2018-01-30 00:07:00.0\tTuesday\t2018-01-30 00:09:00.0\tTuesday\t33333000\tRestriction in rail traffic\tBrig - Domodossola (I)\tlow tide
+2018-01-10 00:06:00.0\tWednesday\t2018-01-02 00:10:00.0\tTuesday\t-191933333000\tEnd of announcement\tVilleneuve -  Bex\tBetween Schaffhausen and Diessenhofen, engineering work is in progress. 
+2018-01-01 00:10:00.0\tMonday\t2018-01-01 00:10:00.0\tMonday\t0\tConstruction work\tBetween Yverdon-les-Bains and Estavayer-le-Lac, engineering work is in progress.\tproblem with the overhead line.
+2018-01-01 00:10:00.0\tMonday\t2018-01-01 00:10:00.0\tMonday\t0\tDisruption\tEstavayer-le-Lac - Yverdon-les-Bains\ttechnical fault with the railway Installation.
+2018-01-01 00:10:00.0\tMonday\t2018-01-01 00:10:00.0\tMonday\t0\tTravel advice\tBetween Rotkreuz, Bahnhof Süd and Hochdorf, Bahnhof\tThe disruption between Villeneuve and Bex on the Lausanne - Martigny line is over.
+2018-01-29 00:09:00.0\tMonday\t2018-01-02 00:10:00.0\tTuesday\t-647983333000\tRestriction in rail traffic\tMontreux - Montbovon - Zweisimmen\tBetween Yverdon-les-Bains and Estavayer-le-Lac, engineering work is in progress. 
+2018-01-02 00:10:00.0\tTuesday\t2018-01-02 00:10:00.0\tTuesday\t0\tRestriction in rail traffic\tMontreux - Montbovon - Zweisimmen\ttrack blocked by train.
+2018-01-01 00:10:00.0\tMonday\t2018-01-05 00:10:00.0\tFriday\t96000000000\tRestriction in rail traffic\tWinterthur - Schaffhausen\tConstruction work 
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tWinterthur - Schaffhausen\tproblem with the overhead line.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tGenève - Bellegarde (Ain)\tproblem with the overhead line.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tMontreux - Montbovon - Zweisimmen\ttrack blocked by train.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tThun - Spiez\ttrack blocked by train.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tEnd of announcement\tThun - Spiez\ttechnical fault with the railway Installation.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tChiasso - Como S. Giovanni\tproblem with the overhead line.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tEnd of announcement\tFiesch -  Niederwald\tdamage to the track.
+2018-01-05 00:10:00.0\tFriday\t2018-01-05 00:10:00.0\tFriday\t0\tConstruction work\tBetween St. Gallen AB and Teufen, engineering work is in progress.\tThe disruption between Thun and Spiez is over.
+2018-01-06 00:10:00.0\tSaturday\t2018-01-06 00:10:00.0\tSaturday\t0\tConstruction work\tBetween Winterthur and Frauenfeld, engineering work is in progress.\tdamage to the track.
+2018-01-06 00:10:00.0\tSaturday\t2018-01-06 00:10:00.0\tSaturday\t0\tRestriction in rail traffic\tLangenthal - Wolhusen\tThe disruption between Fiesch and Niederwald on the Brig, Bahnhofplatz - Andermatt line is over.
+2018-01-16 00:05:00.0\tTuesday\t2018-01-06 00:10:00.0\tSaturday\t-239916667000\tRestriction in rail traffic\tVevey - Aigle\tBetween St. Gallen AB and Teufen, engineering work is in progress.
+2018-01-30 00:09:00.0\tTuesday\t2018-01-12 00:10:00.0\tFriday\t-431983333000\tRestriction in rail traffic\tVevey - Aigle\tBetween Winterthur and Frauenfeld, engineering work is in progress.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tRestriction in rail traffic\tBern - Olten / Zofingen\tThe rail traffic between Rohrbach and Huttwil on the line Langenthal - Wolhusen is interrupted.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tRestriction in rail traffic\tBern - Olten / Zofingen\ttechnical fault with the railway Installation.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tRestriction in rail traffic\tBern - Olten / Zofingen\ttechnical fault with the railway Installation.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tDisruption\tBrig - Domodossola (I)\ttechnical fault with the railway Installation.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tConstruction work\tBulle - Fribourg/Freiburg\ttechnical fault with the railway Installation.
+2018-01-08 00:10:00.0\tMonday\t2018-01-08 00:10:00.0\tMonday\t0\tConstruction work\tRomont - Fribourg/Freiburg\ttechnical fault with the railway Installation.
+2018-01-11 00:10:00.0\tThursday\t2018-01-11 00:10:00.0\tThursday\t0\tEnd of announcement\tEffretikon -  Kemptthal\tproblem with the overhead line.
+2018-01-08 00:09:00.0\tMonday\t2018-01-11 00:11:00.0\tThursday\t72033333000\tRestriction in rail traffic\tLausanne - Brig\tBetween Bulle and Fribourg/Freiburg only limited train services are operating.  Please pay attention to the changed connections and verify them in the online timetable.
+2018-01-08 00:09:00.0\tMonday\t2018-01-29 00:10:00.0\tMonday\t504016667000\tConstruction work\tMontbovon - Rougemont\tBetween Romont and Fribourg/Freiburg, engineering work is in progress.
+2018-01-10 00:10:00.0\tWednesday\t2018-01-10 00:10:00.0\tWednesday\t0\tRestriction in rail traffic\tMorges - Nyon\tThe disruption between Effretikon and Kemptthal on the Zürich Oerlikon - Winterthur line is over.
+2018-01-10 00:10:00.0\tWednesday\t2018-01-10 00:10:00.0\tWednesday\t0\tRestriction in rail traffic\tMorges - Nyon\tproblem with the overhead line.
+2018-01-08 00:10:00.0\tMonday\t2018-01-12 00:10:00.0\tFriday\t96000000000\tConstruction work\tSulgen - St. Gallen\tThe rail traffic between Montbovon and Rougemont is interrupted. 
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tEnd of announcement\tThun - Spiez\tunscheduled construction work. 
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tMorges - Nyon\tunscheduled construction work. 
+2018-01-08 00:04:00.0\tMonday\t2018-01-12 00:10:00.0\tFriday\t96100000000\tRestriction in rail traffic\tStabio - Varese\tconstruction work.
+2018-01-11 00:10:00.0\tThursday\t2018-01-12 00:10:00.0\tFriday\t24000000000\tRestriction in rail traffic\tBern - Olten\tThe disruption between Thun and Spiez is over.
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tEnd of announcement\tBalerna -  Chiasso\tunscheduled construction work. 
+2018-01-16 00:10:00.0\tTuesday\t2018-01-16 00:10:00.0\tTuesday\t0\tRestriction in rail traffic\tBasel SBB - Freiburg (Breisgau) Hbf\ttechnical fault with the railway Installation.
+2018-01-17 00:10:00.0\tWednesday\t2018-01-17 00:10:00.0\tWednesday\t0\tRestriction in rail traffic\tSpiez - Interlaken West\ttechnical fault with the railway Installation.
+2018-01-17 00:10:00.0\tWednesday\t2018-01-17 00:10:00.0\tWednesday\t0\tRestriction in rail traffic\tBasel SBB - Freiburg (Breisgau) Hbf\tThe disruption between Balerna and Chiasso on the Lugano - Chiasso line is over.
+2018-01-16 00:10:00.0\tTuesday\t2018-01-16 00:10:00.0\tTuesday\t0\tConstruction work\tTäuffelen - Siselen-Finsterhennen\tproblem with the overhead line.
+2018-01-16 00:10:00.0\tTuesday\t2018-01-16 00:10:00.0\tTuesday\t0\tRestriction in rail traffic\tThun - Spiez\ttechnical fault with the railway Installation.
+2018-01-16 00:10:00.0\tTuesday\t2018-01-16 00:10:00.0\tTuesday\t0\tRestriction in rail traffic\tKillwangen-Spreitenbach\tproblem with the overhead line.
+2018-01-16 00:10:00.0\tTuesday\t2018-01-17 00:10:00.0\tWednesday\t24000000000\tRestriction in rail traffic\tBern\tBetween Täuffelen and Siselen-Finsterhennen, engineering work is in progress.
+2018-01-11 00:10:00.0\tThursday\t2018-01-12 00:10:00.0\tFriday\t24000000000\tRestriction in rail traffic\tBasel St. Johann\tdamage to the track.
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tEnd of announcement\tBasel St. Johann\ttechnical fault with the railway Installation.
+2018-01-12 00:10:00.0\tFriday\t2018-01-13 00:10:00.0\tSaturday\t24000000000\tRestriction in rail traffic\tZürich HB - Zürich Oerlikon\tproblem with the overhead line.
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tConstruction work\tCadenazzo - Luino (I)\tPersons reported near to the tracks
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tBern - Olten\tThe disruption at Basel St. Johann station has been cleared.
+2018-01-12 00:10:00.0\tFriday\t2018-01-12 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tZürich HB - Luzern\tPersons reported near to the tracks
+2018-01-01 00:10:00.0\tMonday\t2018-01-08 00:12:00.0\tMonday\t168033333000\tRestriction in rail traffic\tZürich Altstetten - Zug\tBetween Cadenazzo and Luino (I), engineering work is in progress. 
+2018-01-13 00:10:00.0\tSaturday\t2018-01-13 00:10:00.0\tSaturday\t0\tConstruction work\tBetween Genève and Lancy-Pont-Rouge engineering work is in progress.\ttrack blocked by train.
+2018-01-13 00:10:00.0\tSaturday\t2018-01-13 00:10:00.0\tSaturday\t0\tConstruction work\t\ttrack blocked by train.
+2018-01-14 00:10:00.0\tSunday\t2018-01-14 00:10:00.0\tSunday\t0\tConstruction work\tVevey - Villeneuve\tdamage to the track.
+2018-01-13 00:10:00.0\tSaturday\t2018-01-15 00:10:00.0\tMonday\t48000000000\tConstruction work\tZürich HB SZU - Uitikon Waldegg\tBetween Genève and Lancy-Pont-Rouge on the line Coppet - Lancy-Pont-Rouge, engineering work is in progress.
+2018-01-12 00:10:00.0\tFriday\t2018-01-27 00:10:00.0\tSaturday\t360000000000\tEnd of announcement\tBasel SBB - Mulhouse Ville\tTrains Regio are cancelled between Hasle-Rüegsau and Konolfingen.  Replacement bus services are operating Hasle-Rüegsau - Konolfingen.
+2018-01-14 00:10:00.0\tSunday\t2018-01-14 00:10:00.0\tSunday\t0\tConstruction work\tBetween Zofingen and Suhr, engineering work is in progress.\tBetween Vevey and Villeneuve, engineering work is in progress.  Please allow for cancellations of trains as well as changed journey times and changed connections.
+2018-01-15 00:10:00.0\tMonday\t2018-01-20 00:10:00.0\tSaturday\t120000000000\tRestriction in rail traffic\tBasel SBB - Mulhouse Ville\tBetween Zürich Schweighof and Uitikon Waldegg on the line Zürich HB SZU - Uitikon Waldegg, engineering work is in progress. 
+2018-01-15 00:10:00.0\tMonday\t2018-01-15 00:10:00.0\tMonday\t0\tConstruction work\tBern - Olten\tThe disruption between Basel SBB and Mulhouse Ville is over. Further delays and occasional cancellations could be possible.
+2018-01-15 00:10:00.0\tMonday\t2018-01-17 00:10:00.0\tWednesday\t48000000000\tRestriction in rail traffic\tLenzburg - Luzern\tConstruction work
+2018-01-15 00:10:00.0\tMonday\t2018-01-15 00:10:00.0\tMonday\t0\tEnd of announcement\tLa Chaux-de-Fonds - Le Locle\tincident in another country.
+2018-01-12 00:10:00.0\tFriday\t2018-01-15 00:10:00.0\tMonday\t72000000000\tRestriction in rail traffic\tSt.Gallen AB - Appenzell\tBetween Bern and Olten only limited train services are operating.
+2018-01-15 00:10:00.0\tMonday\t2018-01-15 00:10:00.0\tMonday\t0\tRestriction in rail traffic\tBern - Olten\tobstacle on the tracks.
+2018-01-18 00:10:00.0\tThursday\t2018-01-18 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tTeufen - Appenzell\tThe disruption between La Chaux-de-Fonds and Le Locle is over.
+2018-01-18 00:10:00.0\tThursday\t2018-01-18 00:10:00.0\tThursday\t0\tConstruction work\tBlatten b. Naters,Luftseilbahn - Naters, Ahorn\toperational malfunction.
+2018-01-18 00:10:00.0\tThursday\t2018-01-18 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tSt. Gallen AB - Appenzell\ttechnical fault with the railway Installation.
+2018-01-18 00:10:00.0\tThursday\t2018-01-19 00:10:00.0\tFriday\t24000000000\tConstruction work\tBetween Coppet and Founex engineering work is in progress.\toperational malfunction.
+2018-01-18 00:10:00.0\tThursday\t2018-01-19 00:10:00.0\tFriday\t24000000000\tRestriction in rail traffic\tFribourg/Freiburg - Payerne\tBetween Blatten b. Naters,Luftseilbahn and Naters, Ahorn, engineering work is in progress.  The stops Blatten b. Naters,Luftseilbahn , Blatten b. Naters,Eija , Naters,Ahorn are not serviced.
+2018-01-18 00:10:00.0\tThursday\t2018-01-19 00:10:00.0\tFriday\t24000000000\tRestriction in rail traffic\tLenzburg - Luzern\toperational malfunction.
+2018-01-18 00:10:00.0\tThursday\t2018-01-19 00:10:00.0\tFriday\t24000000000\tRestriction in rail traffic\tLenzburg - Luzern\tBetween Coppet and Founex on the line Coppet - Lancy-Pont-Rouge, engineering work is in progress.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tConstruction work\tBetween Luzern and Arth-Goldau, engineering work is in progress.\ttrack blocked by train.
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tBellinzona - Chiasso\tobstacle on the tracks.
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tStabio - Varese\tobstacle on the tracks.
+2018-01-15 00:10:00.0\tMonday\t2018-01-19 00:10:00.0\tFriday\t96000000000\tEnd of announcement\tMendrisio -  Chiasso\tConstruction work
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tSt. Gallen AB - Appenzell\tPersons reported near to the tracks
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tSt. Gallen AB - Appenzell\ttechnical fault with the railway Installation.
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tEnd of announcement\tBad Krozingen\tThe disruption between Mendrisio and Chiasso on the Bellinzona - Chiasso line is over.
+2018-01-21 00:10:00.0\tSunday\t2018-01-21 00:10:00.0\tSunday\t0\tRestriction in rail traffic\tFribourg/Freiburg - Payerne\toperational malfunction.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tRestriction in rail traffic\tSt. Gallen AB - Appenzell\toperational malfunction.
+2018-01-19 00:10:00.0\tFriday\t2018-01-19 00:10:00.0\tFriday\t0\tRestriction in rail traffic\tFribourg/Freiburg - Payerne\tThe disruption at Bad Krozingen station has been cleared.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tRestriction in rail traffic\tFribourg/Freiburg - Payerne\tbarrier failure.
+2018-01-18 00:10:00.0\tThursday\t2018-01-21 00:10:00.0\tSunday\t72000000000\tRestriction in rail traffic\tWinterthur\toperational malfunction.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tRestriction in rail traffic\tLenzburg - Zürich HB\ttechnical fault with the railway Installation.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tTravel advice\tSt. Gallen AB - Appenzell\tbarrier failure.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-20 00:10:00.0\tSaturday\t0\tConstruction work\tBussy-Chardonney - Morges\tThe rail traffic at the station Winterthur is affected.
+2018-01-21 00:10:00.0\tSunday\t2018-01-21 00:10:00.0\tSunday\t0\tConstruction work\tSolothurn - Oensingen\ttechnical fault with the railway Installation.
+2018-01-21 00:10:00.0\tSunday\t2018-01-21 00:10:00.0\tSunday\t0\tRestriction in rail traffic\tVevey - Martigny\toperational malfunction.
+2018-01-20 00:10:00.0\tSaturday\t2018-01-21 00:10:00.0\tSunday\t24000000000\tEnd of announcement\tLes Geneveys-sur-Coffrane -  Les Hauts-Geneveys\tBetween Bussy-Chardonney and Morges, engineering work is in progress.
+2018-01-22 00:10:00.0\tMonday\t2018-01-22 00:10:00.0\tMonday\t0\tRestriction in rail traffic\tSierre/Siders\tconstruction work.
+2018-01-25 00:10:00.0\tThursday\t2018-01-25 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tSierre/Siders\ttechnical fault with the railway Installation.
+2018-01-25 00:10:00.0\tThursday\t2018-01-25 00:10:00.0\tThursday\t0\tRestriction in rail traffic\tSierre/Siders\tThe disruption between Les Geneveys-sur-Coffrane and Les Hauts-Geneveys on the Neuchâtel - La Chaux-de-Fonds line is over.
+2018-01-26 00:10:00.0\tFriday\t2018-01-26 00:10:00.0\tFriday\t0\tConstruction work\tLausanne - Brig\ttechnical fault with the railway Installation.
+2018-01-26 00:10:00.0\tFriday\t2018-01-26 00:10:00.0\tFriday\t0\tConstruction work\tWinterthur - Henggart\ttechnical fault with the railway Installation.
+2018-01-26 00:10:00.0\tFriday\t2018-01-26 00:10:00.0\tFriday\t0\tConstruction work\tVisp - Täsch (MGB)\ttechnical fault with the railway Installation.
+2018-01-27 00:10:00.0\tSaturday\t2018-01-28 00:10:00.0\tSunday\t24000000000\tConstruction work\tRomont - Fribourg/Freiburg\tBetween Ardon and Leuk on the line Lausanne - Brig, engineering work is in progress.
+2018-01-01 00:10:00.0\tMonday\t2018-01-14 00:12:00.0\tSunday\t312033333000\tDisruption\tDiessenhofen (Schifflände) - Stein am Rhein (Schifflände)\tBetween Winterthur and Henggart, engineering work is in progress.
+2018-01-15 00:10:00.0\tMonday\t2018-01-28 00:10:00.0\tSunday\t312000000000\tConstruction work\tLausanne - Vevey\tThe rail traffic between Visp and Täsch is interrupted.
+2018-01-08 00:09:00.0\tMonday\t2018-01-29 00:10:00.0\tMonday\t504016667000\tConstruction work\tThusis - Chur (RhB)\tBetween Romont and Fribourg/Freiburg, engineering work is in progress.
+2018-01-04 00:09:00.0\tThursday\t2018-01-28 00:10:00.0\tSunday\t576016667000\tConstruction work\tEN 50467 Zürich HB - Praha hl. n.\tlow tide
+2018-01-15 00:09:00.0\tMonday\t2018-01-11 00:11:00.0\tThursday\t-95966667000\tConstruction work\tBetween Lenzburg and Aarau, engineering work is in progress.\tBetween Lausanne and Lutry on the line Lausanne - Vevey, engineering work is in progress."},{"type":"HTML","data":"<div class=\"result-alert alert-warning\" role=\"alert\"><button type=\"button\" class=\"close\" data-dismiss=\"alert\" aria-label=\"Close\"><span aria-hidden=\"true\">&times;</span></button><strong>Output is truncated</strong> to 102400 bytes. Learn more about <strong>ZEPPELIN_INTERPRETER_OUTPUT_LIMIT</strong></div>"}]},"apps":[],"jobName":"paragraph_1557338940226_391644266","id":"20190508-174257_1704517515","dateCreated":"2019-05-08T18:09:00+0000","dateStarted":"2019-05-11T17:10:25+0000","dateFinished":"2019-05-11T17:10:25+0000","status":"FINISHED","progressUpdateIntervalMs":500,"$$hashKey":"object:6288"},{"text":"%sql
+
+--wie lange dauert es bis stoerungen behoben sind
+
+select convert(end_date, getdate(),0) from stoerungen","user":"admin","dateUpdated":"2019-05-11T16:59:27+0000","config":{"colWidth":12,"editorMode":"ace/mode/sql","results":{},"enabled":true,"editorSetting":{"language":"sql"}},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557338940226_391644266","id":"20190508-174324_433507230","dateCreated":"2019-05-08T18:09:00+0000","status":"ERROR","progressUpdateIntervalMs":500,"$$hashKey":"object:6289","dateFinished":"2019-05-11T16:59:27+0000","dateStarted":"2019-05-11T16:59:27+0000","results":{"code":"ERROR","msg":[{"type":"TEXT","data":"Undefined function: 'convert'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 3 pos 7
+set zeppelin.spark.sql.stacktrace = true to see full stacktrace"}]}},{"text":"%sql
+
+--an welchen wochentagen treten die meisten störungen auf
+
+select count(*) anzahl_meldungen, begin_day from stoerungen
+group by begin_day
+order by anzahl_meldungen desc","user":"admin","dateUpdated":"2019-05-11T17:22:29+0000","config":{"colWidth":12,"enabled":true,"results":{"0":{"graph":{"mode":"pieChart","height":300,"optionOpen":false,"setting":{"multiBarChart":{},"pieChart":{},"stackedAreaChart":{"style":"expand"}},"commonSetting":{},"keys":[{"name":"begin_day","index":1,"aggr":"sum"}],"groups":[{"name":"anzahl_meldungen","index":0,"aggr":"sum"}],"values":[{"name":"anzahl_meldungen","index":0,"aggr":"sum"}]},"helium":{}}},"editorSetting":{"language":"sql"},"editorMode":"ace/mode/sql"},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557591851836_576168130","id":"20190511-162411_785152408","dateCreated":"2019-05-11T16:24:11+0000","status":"FINISHED","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:6740","dateFinished":"2019-05-11T17:00:41+0000","dateStarted":"2019-05-11T17:00:41+0000","results":{"code":"SUCCESS","msg":[{"type":"TABLE","data":"anzahl_meldungen\tbegin_day
+1464\tTuesday
+1442\tMonday
+1290\tFriday
+1272\tThursday
+1239\tSaturday
+1228\tWednesday
+1198\tSunday
+"}]}},{"text":"%sql
+
+--wie viele störungen pro woche
+
+select * from begin_date
+","user":"admin","dateUpdated":"2019-05-11T17:12:33+0000","config":{"colWidth":12,"enabled":true,"results":{},"editorSetting":{"language":"sql"},"editorMode":"ace/mode/sql"},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557591871857_319940687","id":"20190511-162431_199109087","dateCreated":"2019-05-11T16:24:31+0000","status":"ERROR","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:6820","dateFinished":"2019-05-11T16:24:44+0000","dateStarted":"2019-05-11T16:24:44+0000","results":{"code":"ERROR","msg":[{"type":"TEXT","data":"
+mismatched input '<EOF>' expecting {'(', 'SELECT', 'FROM', 'ADD', 'DESC', 'WITH', 'VALUES', 'CREATE', 'TABLE', 'INSERT', 'DELETE', 'DESCRIBE', 'EXPLAIN', 'SHOW', 'USE', 'DROP', 'ALTER', 'MAP', 'SET', 'RESET', 'START', 'COMMIT', 'ROLLBACK', 'REDUCE', 'REFRESH', 'CLEAR', 'CACHE', 'UNCACHE', 'DFS', 'TRUNCATE', 'ANALYZE', 'LIST', 'REVOKE', 'GRANT', 'LOCK', 'UNLOCK', 'MSCK', 'EXPORT', 'IMPORT', 'LOAD'}(line 1, pos 31)
+
+== SQL ==
+--wie viele störungen pro woche
+-------------------------------^^^
+
+set zeppelin.spark.sql.stacktrace = true to see full stacktrace"}]}},{"text":"%sql
+
+
+--wo hat es am meisten störungen
+
+select count(*) as anzahl_meldungen, line from stoerungen
+group by line
+having anzahl_meldungen > 20
+order by anzahl_meldungen desc","user":"admin","dateUpdated":"2019-05-11T17:22:03+0000","config":{"colWidth":12,"enabled":true,"results":{"0":{"graph":{"mode":"scatterChart","height":300,"optionOpen":true,"setting":{"multiBarChart":{"stacked":false},"pieChart":{},"scatterChart":{"xAxis":{"name":"line","index":1,"aggr":"sum"},"yAxis":{"name":"anzahl_meldungen","index":0,"aggr":"sum"}}},"keys":[{"name":"anzahl_meldungen","index":0,"aggr":"sum"}],"groups":[{"name":"line","index":1,"aggr":"sum"}],"values":[{"name":"line","index":1,"aggr":"sum"},{"name":"anzahl_meldungen","index":0,"aggr":"sum"}]},"helium":{}}},"editorSetting":{"language":"sql","editOnDblClick":false},"editorMode":"ace/mode/sql"},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557591884527_-335824680","id":"20190511-162444_783837417","dateCreated":"2019-05-11T16:24:44+0000","status":"FINISHED","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:6900","dateFinished":"2019-05-11T17:20:49+0000","dateStarted":"2019-05-11T17:20:48+0000","results":{"code":"SUCCESS","msg":[{"type":"TABLE","data":"anzahl_meldungen\tline
+78\tBern - Olten / Zofingen
+53\tBern - Olten
+52\t
+49\tBrig - Domodossola (I)
+47\tLausanne - Palézieux
+46\tBasel SBB - Basel Bad Bf
+43\tNeuchâtel - La Chaux-de-Fonds
+42\tOlten - Bern
+40\tVevey - Blonay
+39\tAndermatt - Disentis/Mustér
+37\tArth-Goldau - Bellinzona
+36\tLuzern
+35\tYverdon-les-Bains - Ste-Croix
+34\tVevey - Montreux
+32\tBern - Bern Wankdorf
+32\tZürich HB - Thalwil
+32\tLuzern - Lenzburg
+31\tBern - Belp
+30\tSt. Gallen AB - Appenzell
+30\tSt. Gallen AB - Trogen
+30\tLausanne - Vevey
+30\tLausanne - Genève
+30\tBern - Thun
+30\tCadenazzo - Luino (I)
+29\tThun - Spiez
+29\tZürich Stadelhofen
+29\tFribourg/Freiburg - Romont
+28\tLuzern - Ebikon
+27\tVevey - Villeneuve
+27\tSt. Gallen AB - St. Gallen Notkersegg
+27\tLausanne - Yverdon-les-Bains
+26\tBellinzona - Giubiasco
+26\tWeissbad - Wasserauen
+26\tWinterthur
+25\tBasel SBB - Mulhouse Ville
+25\tKreuzlingen - Konstanz
+24\tOlten - Basel SBB
+24\tLenzburg - Luzern
+23\tLa Plaine
+23\tSt. Gallen - Gossau SG
+22\tBern - Worblaufen
+22\tPayerne
+21\tZürich HB - Baden
+21\tBern - Belp / Schwarzenburg
+21\tZürich HB - Winterthur
+"}]}},{"text":"%sql
+
+--was ist der häufigste störungsgrund
+
+select count(*) as anzahl, reason from stoerungen
+group by reason
+having anzahl > 20
+order by anzahl desc","user":"admin","dateUpdated":"2019-05-11T17:21:54+0000","config":{"colWidth":12,"enabled":true,"results":{"0":{"graph":{"mode":"pieChart","height":300,"optionOpen":false,"setting":{"pieChart":{}},"commonSetting":{},"keys":[{"name":"anzahl","index":0,"aggr":"sum"}],"groups":[{"name":"reason","index":1,"aggr":"sum"}],"values":[{"name":"anzahl","index":0,"aggr":"sum"}]},"helium":{}}},"editorSetting":{"language":"sql"},"editorMode":"ace/mode/sql"},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557591931034_-604333440","id":"20190511-162531_1034598860","dateCreated":"2019-05-11T16:25:31+0000","status":"FINISHED","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:6980","dateFinished":"2019-05-11T17:21:25+0000","dateStarted":"2019-05-11T17:21:24+0000","results":{"code":"SUCCESS","msg":[{"type":"TABLE","data":"anzahl\treason
+389\tproblem with the overhead line
+388\tTechnical fault with the railway Installation
+371\ttechnical fault with the railway Installation.
+340\tdamage to the track.
+335\ttrack blocked by train.
+310\ttechnical fault with the railway Installation
+264\ttrack blocked by train
+250\tproblem with the overhead line.
+241\tTrack blocked by train.
+112\tdamage to the track
+92\theavy snowfall.
+73\tstrong winds
+71\tunscheduled construction work
+69\tstrong winds.
+68\tObstacle on the tracks
+60\tUnscheduled construction work
+59\tincident with a road vehicle
+56\tincident with a road vehicle.
+55\tIncident with a road vehicle
+49\tbarrier failure.
+47\tunscheduled construction work.
+46\tderailment.
+45\tengineering work
+41\trisk of an avalanche.
+41\tPersons reported near to the tracks
+36\tConstruction work
+35\tobstacle on the tracks.
+35\tpower failure.
+34\toperational malfunction.
+33\trisk of an avalanche
+29\tpersons reported near to the tracks
+28\tderailment
+27\tincident in another country.
+26\tFire near the tracks
+26\tLandslide
+26\tobstacle on the tracks
+25\tfire near the tracks
+22\tMaintenance work.
+22\tStrike in Italy
+22\tstorm damages.
+"}]}},{"text":"%sql
+","user":"admin","dateUpdated":"2019-05-11T17:16:33+0000","config":{"colWidth":12,"enabled":true,"results":{},"editorSetting":{"language":"scala"},"editorMode":"ace/mode/scala"},"settings":{"params":{},"forms":{}},"apps":[],"jobName":"paragraph_1557594993501_-1856352931","id":"20190511-171633_157432625","dateCreated":"2019-05-11T17:16:33+0000","status":"READY","progressUpdateIntervalMs":500,"focus":true,"$$hashKey":"object:9889"}],"name":"testsbb","id":"2EDCWQD17","angularObjects":{"2CHS8UYQQ:shared_process":[],"2C8A4SZ9T_livy2:shared_process":[],"2CK8A9MEG:shared_process":[],"2C4U48MY3_spark2:shared_process":[],"2CKAY1A8Y:shared_process":[],"2CKEKWY8Z:shared_process":[]},"config":{"isZeppelinNotebookCronEnable":false,"looknfeel":"default","personalizedMode":"false"},"info":{}}
